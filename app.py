@@ -67,8 +67,8 @@ def get_building_area(addr, kakao_key):
         bun = main_no.zfill(4)
         ji = sub_no.zfill(4) if sub_no else '0000'
         
-        # 💡 보안 강화를 위해 엔드포인트를 http에서 https로 변경했습니다.
-        bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrtTitleInfo"
+        # 💡 [교정완료] getBrtTitleInfo -> getBrTitleInfo로 수정하여 404 에러 해결
+        bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
         params = {
             'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
             'sigunguCd': sigungu_cd,
@@ -81,14 +81,12 @@ def get_building_area(addr, kakao_key):
         
         bld_res = requests.get(bld_url, params=params, timeout=10)
         
-        # 💡 정부 서버가 에러 코드를 뱉었을 경우 예외 처리
         if bld_res.status_code != 200:
             return None, f"정부 서버 연결 실패 (상태 코드 {bld_res.status_code}): {bld_res.text[:100]}"
         
         if not bld_res.text.strip():
             return None, "정부 서버가 빈(Empty) 응답을 보냈습니다. 잠시 후 다시 시도해주세요."
         
-        # 💡 XML 파싱 시 crash 방지 및 원문 출력 디버깅 추가
         try:
             root = ET.fromstring(bld_res.text)
         except ET.ParseError:
