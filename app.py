@@ -6,27 +6,20 @@ import xml.etree.ElementTree as ET
 st.set_page_config(
     page_title="태양광 발전용량 & 여유용량 조회 시스템",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# [공공데이터포털] 건축물대장 API 키 (이미지 속 인증키 반영)
+# 🔑 발급된 API 키 고정 설정
 DATA_GO_KR_KEY = "c838a8d8130510cdb26146fc24b4d5671daddae3b0a25d969a0d2984a57f0308"
+kakao_rest_key = "eee2dd15c07cf4a1660324a1f26848ea"
+kakao_js_key = "6bf846817be3a6a8d8e09a566d264c90"
 
-# 2. 사이드바 - 카카오 API 키 입력 창 (보안 및 편의성)
-with st.sidebar:
-    st.header("🔑 API 설정")
-    st.markdown("카카오 개발자센터에서 발급받은 키를 입력하세요.")
-    kakao_rest_key = st.text_input("카카오 REST API 키", type="password", help="주소를 좌표/지번으로 변환하는 데 사용됩니다.")
-    kakao_js_key = st.text_input("카카오 JavaScript 키", type="password", help="우측 하단에 위성지도를 띄우는 데 사용됩니다.")
-    st.markdown("---")
-    st.info("💡 Tip: 키를 입력하지 않아도 수동으로 면적을 입력해 계산해볼 수 있습니다.")
-
-# 3. 메인 타이틀
+# 2. 메인 타이틀
 st.title("☀️ 태양광 발전부지 1차 분석 대시보드")
 st.caption("주소 입력 한 번으로 한전 연계용량과 건축물대장 기반 발전용량을 동시 분석합니다.")
 st.markdown("---")
 
-# 4. 상단 주소 입력창
+# 3. 상단 주소 입력창
 address = st.text_input(
     "🔍 분석할 지번 또는 도로명 주소를 입력하세요", 
     placeholder="예: 대구 동구 아양로9길 35"
@@ -35,7 +28,7 @@ address = st.text_input(
 # --- 헬퍼 함수: 건축물대장 면적 조회 ---
 def get_building_area(addr, kakao_key):
     if not kakao_key:
-        return None, "사이드바에 카카오 REST API 키를 입력하시면 건축물대장이 자동 조회됩니다."
+        return None, "카카오 REST API 키 설정이 누락되었습니다."
     
     # 1. 카카오 주소 검색 API로 법정동코드 및 지번 추출
     headers = {"Authorization": f"KakaoAK {kakao_key}"}
@@ -45,24 +38,23 @@ def get_building_area(addr, kakao_key):
         res = requests.get(kakao_url, headers=headers)
         res_data = res.json()
         if not res_data.get('documents'):
-            return None, "카카오 API: 주소를 찾을 수 없습니다. 오타를 확인해주세요."
+            return None, "카카오 API: 주소를 찾을 수 없습니다. 정확한 지번/도로명을 입력해주세요."
         
         document = res_data['documents'][0]
-        # 도로명 주소든 지번 주소든 내부 'address' 객체에서 지번 정보 추출
         addr_info = document.get('address') or document.get('road_address')
         
-        # 행정구역에 따른 코드 파싱을 위해 b_code 확보 (시군구5자리 + 법정동5자리)
+        # 행정구역에 따른 코드 파싱 (시군구5자리 + 법정동5자리)
         b_code = document['address']['b_code']
         sigungu_cd = b_code[:5]
         bjdong_cd = b_code[5:]
         
-        # 본번/부번 처리 (건축물대장은 무조건 4자리 숫자로 맞춰야 함 예: 0035)
+        # 본번/부번 처리 (건축물대장은 4자리 숫자로 포맷팅 필요 예: 0035)
         bun = document['address'].get('main_address_no', '').zfill(4)
         ji = document['address'].get('sub_address_no', '').zfill(4)
         if not ji: ji = '0000'
         
     except Exception as e:
-        return None, f"주소 변환 중 오류 발생: {str(e)}"
+        return None, f"주소 좌표 변환 중 오류 발생: {str(e)}"
 
     # 2. 공공데이터포털 건축물대장 표제부 API 호출
     bld_url = "http://apis.data.go.kr/1613000/BldRgstHubService/getBrtTitleInfo"
@@ -84,7 +76,7 @@ def get_building_area(addr, kakao_key):
         result_code = root.find('.//resultCode')
         if result_code is not None and result_code.text != '00':
             result_msg = root.find('.//resultMsg')
-            return None, f"한 HUB 오류: {result_msg.text if result_msg is not None else '인증키 만료 혹은 서버 지연'}"
+            return None, f"건축HUB 오류: {result_msg.text if result_msg is not None else '인증키 만료 혹은 서버 지연'}"
         
         # 건축면적(archArea) 추출
         arch_area_elem = root.find('.//archArea')
@@ -97,12 +89,12 @@ def get_building_area(addr, kakao_key):
     except Exception as e:
         return None, f"건축물대장 조회 실패: {str(e)}"
 
-# 5. 메인 로직 작동
+# 4. 메인 로직 작동
 if address:
     col1, col2 = st.columns(2)
 
     # ----------------------------------------------------------------
-    # [좌측 패널] 한전ON 연계 여유용량 정보 (RPA 연동 전 데모 화면)
+    # [좌측 패널] 한전ON 연계 여유용량 정보 (크롤러 연동 전 데모 화면)
     # ----------------------------------------------------------------
     with col1:
         st.subheader("📋 한전ON 연계 여유용량 현황")
@@ -136,13 +128,13 @@ if address:
         with st.spinner("정부 공공데이터에서 건축물대장 조회 중..."):
             api_area, error_msg = get_building_area(address, kakao_rest_key)
         
-        # API 조회 결과가 있으면 해당 값을 기본값으로, 없으면 수동 입력 유도
+        # API 조회 결과가 있으면 해당 값을 사용, 없으면 안내 문구 출력 후 기본값 제공
         if api_area:
-            st.success(f"🎉 건축물대장 연동 완료! 실제 건축면적을 자동으로 가져왔습니다.")
+            st.success(f"🎉 건축물대장 연동 완료! 실제 건축면적을 자동으로 반영했습니다.")
             default_area = api_area
         else:
             st.warning(error_msg)
-            default_area = 269.04  # 샘플 기본값
+            default_area = 269.04  # 에러 발생 시 참고용 기본값
             
         building_area = st.number_input(
             "건물 면적 직접 수정 (㎡)", 
@@ -163,37 +155,34 @@ if address:
         st.markdown("---")
         st.markdown("#### 🗺️ 현장 위성지도 (카카오 스카이뷰)")
         
-        if kakao_js_key:
-            # 💡 실제 카카오 지도 Javascript API 동적 임베딩
-            kakao_map_html = f"""
-            <div id="map" style="width:100%;height:360px;border-radius:8px;"></div>
-            <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services"></script>
-            <script>
-                var mapContainer = document.getElementById('map'),
-                    mapOption = {{
-                        center: new kakao.maps.LatLng(37.566826, 126.9786567), // 기본 서울시청
-                        level: 3
-                    }};  
-                var map = new kakao.maps.Map(mapContainer, mapOption); 
-                map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 위성지도 레이어 활성화
-                
-                var geocoder = new kakao.maps.services.Geocoder();
-                geocoder.addressSearch('{address}', function(result, status) {{
-                    if (status === kakao.maps.services.Status.OK) {{
-                        var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
-                        var marker = new kakao.maps.Marker({{
-                            map: map,
-                            position: coords
-                        }});
-                        map.setCenter(coords);
-                    }} 
-                }});    
-            </script>
-            """
-            import streamlit.components.v1 as components
-            components.html(kakao_map_html, height=370)
-        else:
-            st.info("💡 사이드바에 카카오 JavaScript 키를 입력하시면 이곳에 실시간 위성지도가 표시됩니다.")
+        # 실제 카카오 지도 Javascript API 동적 임베딩
+        kakao_map_html = f"""
+        <div id="map" style="width:100%;height:360px;border-radius:8px;"></div>
+        <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services"></script>
+        <script>
+            var mapContainer = document.getElementById('map'),
+                mapOption = {{
+                    center: new kakao.maps.LatLng(37.566826, 126.9786567),
+                    level: 3
+                }};  
+            var map = new kakao.maps.Map(mapContainer, mapOption); 
+            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+            
+            var geocoder = new kakao.maps.services.Geocoder();
+            geocoder.addressSearch('{address}', function(result, status) {{
+                if (status === kakao.maps.services.Status.OK) {{
+                    var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                    var marker = new kakao.maps.Marker({{
+                        map: map,
+                        position: coords
+                    }});
+                    map.setCenter(coords);
+                }} 
+            }});    
+        </script>
+        """
+        import streamlit.components.v1 as components
+        components.html(kakao_map_html, height=370)
 
 else:
     st.info(" 상단 입력창에 분석하고자 하는 지번 주소를 입력하시면 즉시 분석 화면이 전개됩니다.")
