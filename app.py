@@ -30,64 +30,87 @@ def get_building_area(addr, kakao_key):
     if not kakao_key:
         return None, "카카오 REST API 키 설정이 누락되었습니다."
     
-    # 1. 카카오 주소 검색 API로 법정동코드 및 지번 추출
     headers = {"Authorization": f"KakaoAK {kakao_key}"}
-    kakao_url = f"https://dapi.kakao.com/v2/local/search/address.json?query={addr}"
+    # 💡 안전한 파라미터 전달을 위해 URL에서 query를 완전히 분리합니다.
+    kakao_url = "https://dapi.kakao.com/v2/local/search/address.json"
     
     try:
-        res = requests.get(kakao_url, headers=headers)
+        # params 옵션을 사용하면 띄어쓰기(공백)나 한글을 파이썬이 알아서 완벽하게 안전한 형태로 인코딩해줍니다.
+        res = requests.get(kakao_url, headers=headers, params={"query": addr}, timeout=5)
+        
+        # 💡 만약 키가 아직 미활성화 상태이거나 카카오 측 차단이 있다면 숨기지 않고 상세 내용을 보여줍니다.
+        if res.status_code != 200:
+            return None, f"카카오 API 서버 인증 실패 (코드 {res.status_code}): {res.text}"
+            
         res_data = res.json()
-        if not res_data.get('documents'):
-            return None, "카카오 API: 주소를 찾을 수 없습니다. 정확한 지번/도로명을 입력해주세요."
+        documents = res_data.get('documents', [])
         
-        document = res_data['documents'][0]
+        if not documents:
+            return None, f"카카오 결과 없음: 입력하신 주소('{addr}')를 시스템이 식별하지 못했습니다. 지번이 정확한지 확인해주세요."
+        
+        document = documents[0]
+        
+        # 지번 주소(address) 정보가 있으면 우선 사용, 없으면 도로명(road_address) 사용
         addr_info = document.get('address') or document.get('road_address')
-        
-        # 행정구역에 따른 코드 파싱 (시군구5자리 + 법정동5자리)
-        b_code = document['address']['b_code']
+        if not addr_info:
+            return None, "검색된 주소의 상세 정보(지번/도로명)가 누락되었습니다."
+            
+        # 법정동코드 안전하게 탐색
+        b_code = addr_info.get('b_code')
+        if not b_code and document.get('address'):
+            b_code = document['address'].get('b_code')
+            
+        if not b_code:
+            return None, "해당 주소에서 법정동코드(b_code)를 추출할 수 없습니다."
+            
         sigungu_cd = b_code[:5]
         bjdong_cd = b_code[5:]
         
-        # 본번/부번 처리 (건축물대장은 4자리 숫자로 포맷팅 필요 예: 0035)
-        bun = document['address'].get('main_address_no', '').zfill(4)
-        ji = document['address'].get('sub_address_no', '').zfill(4)
-        if not ji: ji = '0000'
+        # 본번/부번 처리 (지번 정보 기준 최우선 탐색)
+        main_no, sub_no = "", ""
+        if document.get('address'):
+            main_no = document['address'].get('main_address_no', '')
+            sub_no = document['address'].get('sub_address_no', '')
+        else:
+            main_no = addr_info.get('main_address_no', '')
+            sub_no = addr_info.get('sub_address_no', '')
+            
+        if not main_no:
+            return None, "건축물대장 조회를 위한 지번(본번) 정보가 부족합니다."
+            
+        bun = main_no.zfill(4)
+        ji = sub_no.zfill(4) if sub_no else '0000'
         
-    except Exception as e:
-        return None, f"주소 좌표 변환 중 오류 발생: {str(e)}"
-
-    # 2. 공공데이터포털 건축물대장 표제부 API 호출
-    bld_url = "http://apis.data.go.kr/1613000/BldRgstHubService/getBrtTitleInfo"
-    params = {
-        'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
-        'sigunguCd': sigungu_cd,
-        'bjdongCd': bjdong_cd,
-        'bun': bun,
-        'ji': ji,
-        'numOfRows': '1',
-        'pageNo': '1'
-    }
-    
-    try:
+        # 2. 공공데이터포털 건축물대장 표제부 API 호출
+        bld_url = "http://apis.data.go.kr/1613000/BldRgstHubService/getBrtTitleInfo"
+        params = {
+            'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
+            'sigunguCd': sigungu_cd,
+            'bjdongCd': bjdong_cd,
+            'bun': bun,
+            'ji': ji,
+            'numOfRows': '1',
+            'pageNo': '1'
+        }
+        
         bld_res = requests.get(bld_url, params=params, timeout=10)
         root = ET.fromstring(bld_res.text)
         
-        # 결과 코드 검증
         result_code = root.find('.//resultCode')
         if result_code is not None and result_code.text != '00':
             result_msg = root.find('.//resultMsg')
-            return None, f"건축HUB 오류: {result_msg.text if result_msg is not None else '인증키 만료 혹은 서버 지연'}"
+            return None, f"건축HUB 오류: {result_msg.text if result_msg is not None else '인증키 에러 혹은 서버 지연'}"
         
-        # 건축면적(archArea) 추출
         arch_area_elem = root.find('.//archArea')
         if arch_area_elem is not None and arch_area_elem.text:
             area = float(arch_area_elem.text)
             if area > 0:
                 return area, None
                 
-        return None, "해당 지번에 등록된 건축물대장상의 '건축면적' 데이터가 없습니다."
+        return None, "해당 지번에 등록된 건축물대장상의 '건축면적' 데이터가 0이거나 없습니다."
+        
     except Exception as e:
-        return None, f"건축물대장 조회 실패: {str(e)}"
+        return None, f"시스템 연동 중 오류 발생: {str(e)}"
 
 # 4. 메인 로직 작동
 if address:
