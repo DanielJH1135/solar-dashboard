@@ -22,7 +22,7 @@ st.markdown("---")
 # 3. 상단 주소 입력창
 address = st.text_input(
     "🔍 분석할 지번 또는 도로명 주소를 입력하세요", 
-    placeholder="예: 대구 동구 아양로9길 35"
+    placeholder="예: 대구 수성구 범어동1"
 )
 
 # --- 헬퍼 함수: 건축물대장 면적 조회 ---
@@ -67,7 +67,6 @@ def get_building_data(addr, kakao_key):
         bun = main_no.zfill(4)
         ji = sub_no.zfill(4) if sub_no else '0000'
         
-        # 건축물대장 표제부 API 호출
         bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
         params = {
             'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
@@ -94,7 +93,6 @@ def get_building_data(addr, kakao_key):
             result_msg = root.find('.//resultMsg')
             return None, f"건축HUB 시스템 오류: {result_msg.text if result_msg is not None else '인증키 에러'}"
         
-        # 💡 [업그레이드] 대지면적(platArea)과 건축면적(archArea)을 둘 다 추출
         plat_area_elem = root.find('.//platArea')
         arch_area_elem = root.find('.//archArea')
         
@@ -135,19 +133,17 @@ if address:
         st.link_button("🌐 한전ON 여유용량 조회 페이지 바로가기", "https://online.kepco.co.kr/EWM092D00")
 
     # ----------------------------------------------------------------
-    # [우측 패널] 지붕 면적 및 발전용량 계산 (+ 실시간 카카오 위성지도)
+    # [우측 패널] 면적 및 예상 발전용량 계산 (+ 실시간 카카오 위성지도)
     # ----------------------------------------------------------------
     with col2:
         st.subheader("📐 면적 및 예상 발전용량")
         st.markdown("---")
         
-        # API 자동 조회 실행
         with st.spinner("정부 공공데이터에서 건축물대장 정보 가져오는 중..."):
             api_data, error_msg = get_building_data(address, kakao_rest_key)
         
-        # 기본값 셋팅
         plat_val = 0.0
-        arch_val = 269.04 # 샘플 기본값
+        arch_val = 0.0
         
         if api_data:
             st.success(f"🎉 건축물대장 데이터 연동 성공!")
@@ -156,21 +152,18 @@ if address:
         else:
             st.warning(error_msg)
             
-        # 💡 대지면적과 건축면적을 깔끔한 표 형태로 먼저 브리핑해줍니다.
         st.markdown(f"**🏢 대장 정보 현황:** 대지면적 `{plat_val:,} ㎡` | 건축면적 `{arch_val:,} ㎡`")
         
-        # 💡 어떤 면적을 기준으로 수식을 돌릴지 선택하는 라디오 버튼 추가
         mode = st.radio(
             "💡 어떤 면적을 기준으로 발전용량을 계산할까요?",
             ["🏠 지붕/옥상 기준 (건축면적 사용)", "🌳 마당/나대지 기준 (대지면적 사용)"],
             horizontal=True
         )
         
-        # 선택한 모드에 따라 계산 타깃 설정
         if "지붕/옥상" in mode:
-            selected_area = arch_val
+            selected_area = arch_val if arch_val > 0 else 269.04
         else:
-            selected_area = plat_val
+            selected_area = plat_val if plat_val > 0 else 500.0
             
         building_area = st.number_input(
             "선택된 면적 수정 가능 (㎡)", 
@@ -179,7 +172,6 @@ if address:
             step=1.0
         )
         
-        # 수식 계산: 총면적 / 3.3 / 2
         pyeong = building_area / 3.3
         estimated_kw = pyeong / 2
         
@@ -191,14 +183,14 @@ if address:
         st.markdown("---")
         st.markdown("#### 🗺️ 현장 위성지도 (카카오 스카이뷰)")
         
-        # 실제 카카오 지도 Javascript API 동적 임베딩
+        # 💡 [교정완료] 주소 호출 프로토콜을 https:// 로 명시하여 스트림릿 가상 창 내부 렌더링을 강제 활성화합니다.
         kakao_map_html = f"""
-        <div id="map" style="width:100%;height:360px;border-radius:8px;"></div>
-        <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services"></script>
+        <div id="map" style="width:100%;height:360px;border-radius:8px;background-color:#eee;"></div>
+        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services"></script>
         <script>
             var mapContainer = document.getElementById('map'),
                 mapOption = {{
-                    center: new kakao.maps.LatLng(37.566826, 126.9786567),
+                    center: new kakao.maps.LatLng(36.3504119, 127.3845475), // 기본 대전 중심
                     level: 3
                 }};  
             var map = new kakao.maps.Map(mapContainer, mapOption); 
@@ -213,7 +205,7 @@ if address:
                         position: coords
                     }});
                     map.setCenter(coords);
-                }} 
+                }}
             }});    
         </script>
         """
