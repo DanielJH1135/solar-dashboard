@@ -22,7 +22,7 @@ st.markdown("---")
 # 3. 상단 주소 입력창
 address = st.text_input(
     "🔍 분석할 지번 또는 도로명 주소를 입력하세요", 
-    placeholder="예: 대구 수성구 범어동1"
+    placeholder="예: 대구 동구 아양로9길 35"
 )
 
 # --- 헬퍼 함수: 건축물대장 면적 조회 ---
@@ -183,11 +183,18 @@ if address:
         st.markdown("---")
         st.markdown("#### 🗺️ 현장 위성지도 (카카오 스카이뷰)")
         
-        # 💡 [핵심 패치] &autoload=false 옵션을 추가하고, 함수를 kakao.maps.load() 콜백 안으로 감싸 이프레임 타이틀 버깅을 해결했습니다.
+        # 💡 [도메인 탐색기 장착] 지도가 안 뜰 때 카카오에 등록해야 할 진짜 주소를 화면에 강제 인쇄합니다.
         kakao_map_html = f"""
+        <div style="background-color:#fff3cd; color:#856404; padding:8px; border-radius:4px; font-size:12px; margin-bottom:8px; border:1px solid #ffeeba;">
+            🔑 <b>가상 도메인 탐지기:</b> 지도가 회색일 경우, 아래 주소를 복사해 카카오 <b>[JavaScript SDK 도메인]</b>에 추가하세요:<br>
+            <span id="secret-origin" style="font-weight:bold; color:#d9534f; font-size:13px;">확인 중...</span>
+        </div>
         <div id="map" style="width:100%;height:360px;border-radius:8px;background-color:#eee;"></div>
         <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services&autoload=false"></script>
         <script>
+            // 현재 내장 창의 진짜 원본 도메인을 추적해 텍스트로 박아줍니다.
+            document.getElementById('secret-origin').innerText = window.location.origin;
+
             kakao.maps.load(function() {{
                 var mapContainer = document.getElementById('map'),
                     mapOption = {{
@@ -212,7 +219,7 @@ if address:
         </script>
         """
         import streamlit.components.v1 as components
-        components.html(kakao_map_html, height=370)
+        components.html(kakao_map_html, height=430)
 
 else:
     st.info(" 상단 입력창에 분석하고자 하는 지번 주소를 입력하시면 즉시 분석 화면이 전개됩니다.")
