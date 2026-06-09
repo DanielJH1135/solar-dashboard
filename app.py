@@ -183,30 +183,32 @@ if address:
         st.markdown("---")
         st.markdown("#### 🗺️ 현장 위성지도 (카카오 스카이뷰)")
         
-        # 💡 [교정완료] 주소 호출 프로토콜을 https:// 로 명시하여 스트림릿 가상 창 내부 렌더링을 강제 활성화합니다.
+        # 💡 [핵심 패치] &autoload=false 옵션을 추가하고, 함수를 kakao.maps.load() 콜백 안으로 감싸 이프레임 타이틀 버깅을 해결했습니다.
         kakao_map_html = f"""
         <div id="map" style="width:100%;height:360px;border-radius:8px;background-color:#eee;"></div>
-        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services"></script>
+        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_js_key}&libraries=services&autoload=false"></script>
         <script>
-            var mapContainer = document.getElementById('map'),
-                mapOption = {{
-                    center: new kakao.maps.LatLng(36.3504119, 127.3845475), // 기본 대전 중심
-                    level: 3
-                }};  
-            var map = new kakao.maps.Map(mapContainer, mapOption); 
-            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
-            
-            var geocoder = new kakao.maps.services.Geocoder();
-            geocoder.addressSearch('{address}', function(result, status) {{
-                if (status === kakao.maps.services.Status.OK) {{
-                    var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
-                    var marker = new kakao.maps.Marker({{
-                        map: map,
-                        position: coords
-                    }});
-                    map.setCenter(coords);
-                }}
-            }});    
+            kakao.maps.load(function() {{
+                var mapContainer = document.getElementById('map'),
+                    mapOption = {{
+                        center: new kakao.maps.LatLng(36.3504119, 127.3845475),
+                        level: 3
+                    }};  
+                var map = new kakao.maps.Map(mapContainer, mapOption); 
+                map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+                
+                var geocoder = new kakao.maps.services.Geocoder();
+                geocoder.addressSearch('{address}', function(result, status) {{
+                    if (status === kakao.maps.services.Status.OK) {{
+                        var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        var marker = new kakao.maps.Marker({{
+                            map: map,
+                            position: coords
+                        }});
+                        map.setCenter(coords);
+                    }}
+                }});
+            }});
         </script>
         """
         import streamlit.components.v1 as components
