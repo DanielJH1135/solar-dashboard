@@ -26,7 +26,7 @@ address = st.text_input(
 )
 
 # --- 헬퍼 함수: 건축물대장 면적 조회 ---
-def get_building_area(addr, kakao_key):
+def get_building_data(addr, kakao_key):
     if not kakao_key:
         return None, "카카오 REST API 키 설정이 누락되었습니다."
     
@@ -67,7 +67,7 @@ def get_building_area(addr, kakao_key):
         bun = main_no.zfill(4)
         ji = sub_no.zfill(4) if sub_no else '0000'
         
-        # 💡 [교정완료] getBrtTitleInfo -> getBrTitleInfo로 수정하여 404 에러 해결
+        # 건축물대장 표제부 API 호출
         bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
         params = {
             'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
@@ -84,36 +84,34 @@ def get_building_area(addr, kakao_key):
         if bld_res.status_code != 200:
             return None, f"정부 서버 연결 실패 (상태 코드 {bld_res.status_code}): {bld_res.text[:100]}"
         
-        if not bld_res.text.strip():
-            return None, "정부 서버가 빈(Empty) 응답을 보냈습니다. 잠시 후 다시 시도해주세요."
-        
         try:
             root = ET.fromstring(bld_res.text)
         except ET.ParseError:
-            return None, f"정부 서버가 올바르지 않은 응답(HTML)을 보냈습니다. 원문: {bld_res.text[:150]}"
+            return None, "정부 서버 응답 데이터 해석 실패(XML 형식 오류)"
         
         result_code = root.find('.//resultCode')
         if result_code is not None and result_code.text != '00':
             result_msg = root.find('.//resultMsg')
-            return None, f"건축HUB 시스템 오류: {result_msg.text if result_msg is not None else '인증키 만료 혹은 미활성화'}"
+            return None, f"건축HUB 시스템 오류: {result_msg.text if result_msg is not None else '인증키 에러'}"
         
+        # 💡 [업그레이드] 대지면적(platArea)과 건축면적(archArea)을 둘 다 추출
+        plat_area_elem = root.find('.//platArea')
         arch_area_elem = root.find('.//archArea')
-        if arch_area_elem is not None and arch_area_elem.text:
-            area = float(arch_area_elem.text)
-            if area > 0:
-                return area, None
-                
-        return None, "해당 지번에 등록된 건축물대장상의 '건축면적' 데이터가 0이거나 없습니다."
+        
+        plat_area = float(plat_area_elem.text) if (plat_area_elem is not None and plat_area_elem.text) else 0.0
+        arch_area = float(arch_area_elem.text) if (arch_area_elem is not None and arch_area_elem.text) else 0.0
+        
+        return {"plat_area": plat_area, "arch_area": arch_area}, None
         
     except Exception as e:
-        return None, f"시스템 연동 중 알 수 없는 오류 발생: {str(e)}"
+        return None, f"시스템 연동 중 오류 발생: {str(e)}"
 
 # 4. 메인 로직 작동
 if address:
     col1, col2 = st.columns(2)
 
     # ----------------------------------------------------------------
-    # [좌측 패널] 한전ON 연계 여유용량 정보 (크롤러 연동 전 데모 화면)
+    # [좌측 패널] 한전ON 연계 여유용량 정보
     # ----------------------------------------------------------------
     with col1:
         st.subheader("📋 한전ON 연계 여유용량 현황")
@@ -140,25 +138,44 @@ if address:
     # [우측 패널] 지붕 면적 및 발전용량 계산 (+ 실시간 카카오 위성지도)
     # ----------------------------------------------------------------
     with col2:
-        st.subheader("📐 지붕 면적 및 예상 발전용량")
+        st.subheader("📐 면적 및 예상 발전용량")
         st.markdown("---")
         
         # API 자동 조회 실행
-        with st.spinner("정부 공공데이터에서 건축물대장 조회 중..."):
-            api_area, error_msg = get_building_area(address, kakao_rest_key)
+        with st.spinner("정부 공공데이터에서 건축물대장 정보 가져오는 중..."):
+            api_data, error_msg = get_building_data(address, kakao_rest_key)
         
-        # API 조회 결과가 있으면 해당 값을 사용, 없으면 안내 문구 출력 후 기본값 제공
-        if api_area:
-            st.success(f"🎉 건축물대장 연동 완료! 실제 건축면적을 자동으로 반영했습니다.")
-            default_area = api_area
+        # 기본값 셋팅
+        plat_val = 0.0
+        arch_val = 269.04 # 샘플 기본값
+        
+        if api_data:
+            st.success(f"🎉 건축물대장 데이터 연동 성공!")
+            plat_val = api_data["plat_area"]
+            arch_val = api_data["arch_area"]
         else:
             st.warning(error_msg)
-            default_area = 269.04  # 에러 발생 시 참고용 기본값
+            
+        # 💡 대지면적과 건축면적을 깔끔한 표 형태로 먼저 브리핑해줍니다.
+        st.markdown(f"**🏢 대장 정보 현황:** 대지면적 `{plat_val:,} ㎡` | 건축면적 `{arch_val:,} ㎡`")
+        
+        # 💡 어떤 면적을 기준으로 수식을 돌릴지 선택하는 라디오 버튼 추가
+        mode = st.radio(
+            "💡 어떤 면적을 기준으로 발전용량을 계산할까요?",
+            ["🏠 지붕/옥상 기준 (건축면적 사용)", "🌳 마당/나대지 기준 (대지면적 사용)"],
+            horizontal=True
+        )
+        
+        # 선택한 모드에 따라 계산 타깃 설정
+        if "지붕/옥상" in mode:
+            selected_area = arch_val
+        else:
+            selected_area = plat_val
             
         building_area = st.number_input(
-            "건물 면적 직접 수정 (㎡)", 
+            "선택된 면적 수정 가능 (㎡)", 
             min_value=0.0, 
-            value=default_area, 
+            value=selected_area, 
             step=1.0
         )
         
