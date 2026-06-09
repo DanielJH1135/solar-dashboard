@@ -14,122 +14,125 @@ HTML_TEMPLATE = """
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>대구지사 태양광 부지 분석 플랫폼</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
+        /* 모바일 지도 터치 스크롤 꼬임 방지 및 유연한 높이 */
+        .map-container { min-height: 350px; height: 50vh; }
+        @media (min-width: 1024px) { .map-container { height: 100%; min-height: 580px; } }
     </style>
 </head>
-<body class="p-6 max-w-7xl mx-auto">
+<body class="p-4 md:p-6 max-w-7xl mx-auto">
 
-    <header class="flex justify-between items-center mb-8 border-b border-gray-800 pb-5">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-gray-800 pb-5">
         <div>
-            <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+            <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 분석 관제 시스템
             </h1>
-            <p class="text-sm text-gray-400 mt-1">실무 음영 보정 계수 반영 시뮬레이터 및 무과금 클라우드 운용 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">실무 음영 보정 계수 반영 시뮬레이터 및 모바일 반응형 완전체</p>
         </div>
-        <div class="text-right">
-            <span class="bg-emerald-950 text-emerald-400 text-xs px-3 py-1.5 rounded-full font-medium border border-emerald-800">
-                <i class="fa-solid fa-cloud mr-1"></i> 버셀 프리미엄 무료 모드
+        <div>
+            <span class="bg-emerald-950 text-emerald-400 text-xs px-3 py-1.5 rounded-full font-medium border border-emerald-800 inline-block">
+                <i class="fa-solid fa-mobile-screen-button mr-1"></i> 모바일 최적화 활성화
             </span>
         </div>
     </header>
 
-    <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-8 flex gap-4 items-center shadow-xl">
+    <div class="bg-gray-900 border border-gray-800 p-4 md:p-5 rounded-2xl mb-6 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center shadow-xl">
         <div class="relative flex-grow">
-            <i class="fa-solid fa-location-dot absolute left-4 top-4 text-gray-500"></i>
+            <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-500"></i>
             <input type="text" id="addressInput" value="대구광역시 수성구 범어동 1" 
-                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3.5 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-base"
+                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base"
                    placeholder="분석할 지번 주소를 입력하세요">
         </div>
-        <button id="btnAnalyze" onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-8 py-3.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 text-base">
+        <button id="btnAnalyze" onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-magnifying-glass-chart"></i> 통합 부지 분석
         </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         <div class="lg:col-span-6 flex flex-col gap-6">
             
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl">
-                <h2 class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-5 flex items-center gap-2">
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-4 flex items-center gap-2">
                     <i class="fa-solid fa-calculator text-emerald-400"></i> 정부 대장 면적 연산
                 </h2>
                 
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="bg-gray-950 border border-gray-800 p-4 rounded-xl border-l-4 border-l-blue-500">
-                        <span class="text-xs text-gray-500 block mb-1">🌳 공식 전체 대지면적</span>
-                        <span id="platArea" class="text-xl font-bold text-white">0.00</span> <span class="text-sm text-gray-400">㎡</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div class="bg-gray-950 border border-gray-800 p-3.5 rounded-xl border-l-4 border-l-blue-500">
+                        <span class="text-xs text-gray-500 block mb-0.5">🌳 공식 전체 대지면적</span>
+                        <span id="platArea" class="text-lg font-bold text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
                     </div>
-                    <div class="bg-gray-950 border border-gray-800 p-4 rounded-xl border-l-4 border-l-emerald-500">
-                        <span class="text-xs text-gray-500 block mb-1">🏢 공식 기본 건축면적</span>
-                        <span id="archArea" class="text-xl font-bold text-white">0.00</span> <span class="text-sm text-gray-400">㎡</span>
+                    <div class="bg-gray-950 border border-gray-800 p-3.5 rounded-xl border-l-4 border-l-emerald-500">
+                        <span class="text-xs text-gray-500 block mb-0.5">🏢 공식 기본 건축면적</span>
+                        <span id="archArea" class="text-lg font-bold text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
                     </div>
                 </div>
                 
-                <div class="flex gap-4 mb-5">
-                    <label class="flex-1 bg-gray-950 border border-gray-800 p-4 rounded-xl flex items-center gap-3 cursor-pointer hover:border-gray-700">
-                        <input type="radio" name="calcMode" value="plat" checked onchange="switchMode('plat')" class="accent-blue-500">
-                        <span class="text-sm text-gray-300 font-medium">🌳 나대지/마당 (가중치 1.2)</span>
+                <div class="flex flex-col sm:flex-row gap-2.5 mb-4">
+                    <label class="flex-1 bg-gray-950 border border-gray-800 p-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer hover:border-gray-700">
+                        <input type="radio" name="calcMode" value="plat" checked onchange="switchMode('plat')" class="accent-blue-500 w-4 h-4">
+                        <span class="text-xs md:text-sm text-gray-300 font-medium">🌳 나대지/마당 (가중치 1.2)</span>
                     </label>
-                    <label class="flex-1 bg-gray-950 border border-gray-800 p-4 rounded-xl flex items-center gap-3 cursor-pointer hover:border-gray-700">
-                        <input type="radio" name="calcMode" value="arch" onchange="switchMode('arch')" class="accent-emerald-400">
-                        <span class="text-sm text-gray-300 font-medium">🏢 지붕/옥상형 (가중치 1.5)</span>
+                    <label class="flex-1 bg-gray-950 border border-gray-800 p-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer hover:border-gray-700">
+                        <input type="radio" name="calcMode" value="arch" onchange="switchMode('arch')" class="accent-emerald-400 w-4 h-4">
+                        <span class="text-xs md:text-sm text-gray-300 font-medium">🏢 지붕/옥상형 (가중치 1.5)</span>
                     </label>
                 </div>
 
-                <div class="mb-6">
+                <div class="mb-4">
                     <label class="text-xs text-gray-500 block mb-1.5" id="inputLabel">실측 반영 마당 면적 수정 (㎡)</label>
-                    <input type="number" id="customArea" oninput="calculateValues()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-white font-bold focus:outline-none focus:border-emerald-500 text-base">
+                    <input type="number" id="customArea" oninput="calculateValues()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:border-emerald-500 text-sm md:text-base">
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 border-t border-gray-800 pt-5">
-                    <div class="bg-gray-950/50 p-4 rounded-xl border border-gray-850 text-center">
-                        <span class="text-gray-400 text-xs block mb-1">📐 가용 환산 평수</span>
-                        <span class="text-xl font-bold text-emerald-400" id="resPyeong">0.00 평</span>
+                <div class="grid grid-cols-2 gap-3 border-t border-gray-800 pt-4">
+                    <div class="bg-gray-950/50 p-3 text-center rounded-xl border border-gray-850">
+                        <span class="text-gray-400 text-xs block mb-0.5">📐 가용 환산 평수</span>
+                        <span class="text-base md:text-lg font-bold text-emerald-400" id="resPyeong">0.00 평</span>
                     </div>
-                    <div class="bg-gradient-to-br from-gray-950 to-emerald-950/30 p-4 rounded-xl border border-emerald-900/30 text-center">
-                        <span class="text-gray-400 text-xs block mb-1">⚡ 실무 보정 설치용량</span>
-                        <span class="text-2xl font-black text-emerald-400" id="resKw">0.00 kW</span>
+                    <div class="bg-gradient-to-br from-gray-950 to-emerald-950/30 p-3 text-center rounded-xl border border-emerald-900/30">
+                        <span class="text-gray-400 text-xs block mb-0.5">⚡ 실무 보정 설치용량</span>
+                        <span class="text-base md:text-lg font-black text-emerald-400" id="resKw">0.00 kW</span>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl">
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-4 flex items-center gap-2">
                     <i class="fa-solid fa-money-bill-trend-up text-amber-400"></i> 현장 영업용 정밀 수익 시뮬레이션
                 </h2>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-gray-950 border border-gray-800 p-4 rounded-xl">
-                        <span class="text-xs text-gray-500 block mb-1">☀️ 연간 예상 발전량</span>
-                        <span id="annualGen" class="text-xl font-bold text-amber-500">0</span> <span class="text-xs text-gray-400">kWh/년</span>
-                        <span class="text-[11px] text-gray-500 block mt-1">(대구 평균 일사량 3.6시간 반영)</span>
+                        <span class="text-xs text-gray-500 block mb-0.5">☀️ 연간 예상 발전량</span>
+                        <span id="annualGen" class="text-lg font-bold text-amber-500">0</span> <span class="text-xs text-gray-400">kWh/년</span>
+                        <span class="text-[10px] text-gray-500 block mt-0.5">(대구 일사량 3.6시간 반영)</span>
                     </div>
                     <div class="bg-gray-950 border border-gray-800 p-4 rounded-xl">
-                        <span class="text-xs text-gray-500 block mb-1">💰 연간 예상 매출 수익</span>
-                        <span id="annualRevenue" class="text-xl font-black text-amber-400">0</span> <span class="text-xs text-gray-400">원/년</span>
-                        <span class="text-[11px] text-gray-400 block mt-1" id="unitPriceLabel">(SMP+REC 가중치 적용)</span>
+                        <span class="text-xs text-gray-500 block mb-0.5">💰 연간 예상 매출 수익</span>
+                        <span id="annualRevenue" class="text-lg font-black text-amber-400">0</span> <span class="text-xs text-gray-400">원/년</span>
+                        <span class="text-[10px] text-gray-400 block mt-0.5" id="unitPriceLabel">(SMP+REC 가중치 적용)</span>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
-                <h3 class="text-white font-bold mb-2 flex items-center gap-2 text-base">
-                    <i class="fa-solid fa-arrow-up-right-from-square text-blue-400"></i> 2차 검증: 한전ON 선로 용량 조회 연계
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 shadow-xl">
+                <h3 class="text-white font-bold mb-1.5 flex items-center gap-2 text-sm md:text-base">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-blue-400"></i> 2차 검증: 한전ON 선로 용량 조회
                 </h3>
-                <p class="text-xs text-gray-400 mb-4 leading-relaxed">한전ON은 가상 보안 방어벽이 높아 직접 마우스 드롭다운 조회를 하시는 동선이 가장 완벽합니다. 본 시스템에서 면적 수치를 확정하신 후, 아래 단추를 눌러 공식 창에서 수동 조회를 병행하십시오.</p>
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full text-center bg-gray-950 border border-gray-800 hover:bg-gray-850 text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-inner">
-                    🌐 한전ON 공식 용량조회 웹사이트 열기 (수동 조회)
+                <p class="text-[11px] md:text-xs text-gray-400 mb-3.5 leading-relaxed">면적 연산 후 아래 버튼을 터치하여 공식 사이트 드롭다운 메뉴를 통해 실시간 여유 선로 수치를 대조하십시오.</p>
+                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full text-center bg-gray-950 border border-gray-800 hover:bg-gray-850 text-white font-bold py-3 rounded-xl transition-all text-xs md:text-sm shadow-inner active:scale-98">
+                    🌐 한전ON 공식 용량조회 웹사이트 열기
                 </a>
             </div>
 
         </div>
 
-        <div class="lg:col-span-6 bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-xl flex flex-col" style="min-height: 580px;">
-            <div id="map" class="w-full flex-grow rounded-xl border border-gray-950 shadow-inner"></div>
+        <div class="lg:col-span-6 bg-gray-900 border border-gray-800 rounded-2xl p-3 shadow-xl flex flex-col">
+            <div id="map" class="w-full map-container rounded-xl border border-gray-950 shadow-inner"></div>
         </div>
 
     </div>
@@ -205,10 +208,10 @@ HTML_TEMPLATE = """
             let unitPrice = 0;
             if (currentMode === 'plat') {
                 unitPrice = 130 + (70 * 1.2); 
-                document.getElementById('unitPriceLabel').innerText = "(토지 가중치 1.2 적용: 214원/kWh)";
+                document.getElementById('unitPriceLabel').innerText = "(토지 가중치 1.2: 214원/kWh)";
             } else {
                 unitPrice = 130 + (70 * 1.5); 
-                document.getElementById('unitPriceLabel').innerText = "(건축물 가중치 1.5 적용: 235원/kWh)";
+                document.getElementById('unitPriceLabel').innerText = "(건축물 가중치 1.5: 235원/kWh)";
             }
             
             const annualGeneration = kw * 3.6 * 365;
@@ -275,5 +278,4 @@ def api_analyze():
             
     return jsonify(response_data)
 
-# 💡 버셀(Vercel) 서버리스 전용 백엔드 타겟 매핑 고정
 app = app
