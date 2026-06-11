@@ -30,13 +30,13 @@ HTML_TEMPLATE = """
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-gray-800 pb-5">
         <div>
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 분석 관제 시스템
+                <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 분석시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">실무 음영 보정 계수 반영 시뮬레이터 및 모바일 반응형 완전체</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">카카오맵+국토부건축물대장API연동Ver.</p>
         </div>
         <div>
             <span class="bg-emerald-950 text-emerald-400 text-xs px-3 py-1.5 rounded-full font-medium border border-emerald-800 inline-block">
-                <i class="fa-solid fa-mobile-screen-button mr-1"></i> 모바일 최적화 활성화
+                <i class="fa-solid fa-mobile-screen-button mr-1"></i> 작동중
             </span>
         </div>
     </header>
@@ -125,7 +125,7 @@ HTML_TEMPLATE = """
                 </h3>
                 <p class="text-[11px] md:text-xs text-gray-400 mb-3.5 leading-relaxed">면적 연산 후 아래 버튼을 터치하여 공식 사이트 드롭다운 메뉴를 통해 실시간 여유 선로 수치를 대조하십시오.</p>
                 <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full text-center bg-gray-950 border border-gray-800 hover:bg-gray-850 text-white font-bold py-3 rounded-xl transition-all text-xs md:text-sm shadow-inner active:scale-98">
-                    🌐 한전ON 공식 용량조회 웹사이트 열기
+                    🌐 한전ON 공식 용량조회 웹사이트 열기(2단계검증)
                 </a>
             </div>
 
@@ -208,7 +208,7 @@ HTML_TEMPLATE = """
             let unitPrice = 0;
             if (currentMode === 'plat') {
                 unitPrice = 130 + (70 * 1.2); 
-                document.getElementById('unitPriceLabel').innerText = "(토지 가중치 1.2: 214원/kWh)";
+                document.getElementById('unitPriceLabel').innerText = "(토지 가중치 1.0: 171.2원/kWh)";
             } else {
                 unitPrice = 130 + (70 * 1.5); 
                 document.getElementById('unitPriceLabel').innerText = "(건축물 가중치 1.5: 235원/kWh)";
