@@ -35,9 +35,9 @@ HTML_TEMPLATE = """
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-gray-800 pb-5">
         <div>
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
+                <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 대시보드 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">국토부 건축물대장 정보 집중 정밀 연동 Ver.</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">국토부 건축물대장 종합 연동 및 3중 면적 시뮬레이터 Ver.</p>
         </div>
     </header>
 
@@ -61,18 +61,22 @@ HTML_TEMPLATE = """
                 <h3 class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-building"></i> 국토부 건축물대장 정보
                 </h3>
-                <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
-                    <span class="text-[11px] text-gray-500 block mb-1">조회 타겟 매칭 지번</span>
-                    <span id="targetJibun" class="text-sm font-mono text-gray-300">-</span>
+                <div class="bg-gray-950 p-2.5 rounded-xl border border-gray-850 mb-3 text-center">
+                    <span class="text-[10px] text-gray-500 block mb-0.5">조회 타겟 매칭 지번</span>
+                    <span id="targetJibun" class="text-xs font-mono text-gray-300">-</span>
                 </div>
-                <div class="grid grid-cols-2 gap-3 text-center">
-                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">건축 면적</span>
-                        <span id="bdArchArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-1">대지 면적</span>
+                        <span id="bdPlatArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
                     </div>
-                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">연면적</span>
-                        <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-1">건축 면적</span>
+                        <span id="bdArchArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
+                    </div>
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-1">건물 연면적</span>
+                        <span id="bdTotArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
                     </div>
                 </div>
             </div>
@@ -92,8 +96,24 @@ HTML_TEMPLATE = """
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
+                    
+                    <div class="grid grid-cols-3 gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-850">
+                        <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
+                            <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500 mb-1">
+                            <span class="text-[10px] text-gray-400 font-medium">대지(마당)</span>
+                        </label>
+                        <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
+                            <input type="radio" name="calcMode" value="roof" onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
+                            <span class="text-[10px] text-gray-400 font-medium">건물 지붕</span>
+                        </label>
+                        <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
+                            <input type="radio" name="calcMode" value="totarea" onchange="switchMode('totarea')" class="accent-purple-400 mb-1">
+                            <span class="text-[10px] text-gray-400 font-medium">건물 연면적</span>
+                        </label>
+                    </div>
+                    
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex items-center justify-between">
-                        <span class="text-xs text-gray-500">지붕 가용 실측 면적 입력 (㎡)</span>
+                        <span class="text-xs text-gray-500" id="inputLabel">가용 실측 면적 입력 (㎡)</span>
                         <input type="number" id="customArea" oninput="calculateValues()" class="w-32 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
                     </div>
 
@@ -131,9 +151,9 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">리스크 제로</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대(50kW이상)</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대(50kW이상)
+                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대
                         </h3>
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
@@ -159,7 +179,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>국토부 건축물대장 원본 대조 중...</span>
+                        <span>국토부 건축물대장 정보 연동 동기화 중...</span>
                     </div>
                 </div>
             </div>
@@ -170,7 +190,9 @@ HTML_TEMPLATE = """
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=""" + (KAKAO_JS_KEY if KAKAO_JS_KEY else "") + """&libraries=services"></script>
     <script>
         let map, marker, ps, geocoder;
+        let rawPlatArea = 0;
         let rawArchArea = 0;
+        let rawTotArea = 0;
 
         document.addEventListener("DOMContentLoaded", function() {
             const mapContainer = document.getElementById('map');
@@ -185,6 +207,24 @@ HTML_TEMPLATE = """
             
             startAnalysis();
         });
+
+        // 🚨 3가지 모니터링 모드 분기 스위치 작동 연동
+        function switchMode(mode) {
+            let areaInput = document.getElementById('customArea');
+            if (mode === 'land') {
+                // 대지면적에서 건축면적을 빼 가용 마당 산출
+                let netYardArea = rawPlatArea - rawArchArea;
+                areaInput.value = netYardArea > 0 ? netYardArea.toFixed(2) : (rawPlatArea > 0 ? rawPlatArea.toFixed(2) : "0.00");
+                document.getElementById('inputLabel').innerText = "마당 가용 면적 입력 (㎡)";
+            } else if (mode === 'roof') {
+                areaInput.value = rawArchArea > 0 ? rawArchArea.toFixed(2) : "0.00";
+                document.getElementById('inputLabel').innerText = "지붕 가용 면적 입력 (㎡)";
+            } else if (mode === 'totarea') {
+                areaInput.value = rawTotArea > 0 ? rawTotArea.toFixed(2) : "0.00";
+                document.getElementById('inputLabel').innerText = "건물 연면적 기준 입력 (㎡)";
+            }
+            calculateValues();
+        }
 
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
@@ -221,20 +261,26 @@ HTML_TEMPLATE = """
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
                     if(data.building_success) {
+                        rawPlatArea = data.plat_area ? parseFloat(data.plat_area) : 0.0;
                         rawArchArea = data.arch_area ? parseFloat(data.arch_area) : 0.0;
+                        rawTotArea = data.tot_area ? parseFloat(data.tot_area) : 0.0;
+                        
                         document.getElementById('targetJibun').innerText = `${data.sigungu_cd}-${data.bjdong_cd} ${parseInt(data.bun)}-${parseInt(data.ji)}`;
+                        document.getElementById('bdPlatArea').innerText = rawPlatArea.toLocaleString();
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
-                        document.getElementById('bdTotArea').innerText = data.tot_area.toLocaleString();
-                        document.getElementById('customArea').value = rawArchArea.toFixed(2);
+                        document.getElementById('bdTotArea').innerText = rawTotArea.toLocaleString();
                     } else {
+                        rawPlatArea = 0.0;
                         rawArchArea = 0.0;
-                        document.getElementById('targetJibun').innerText = data.error_msg ? `대장조회실패: ${data.error_msg}` : "건축물 없음 (나대지)";
+                        rawTotArea = 0.0;
+                        document.getElementById('targetJibun').innerText = data.error_msg ? `대장조회실패: ${data.error_msg}` : "건축물 정보 없음";
+                        document.getElementById('bdPlatArea').innerText = "0";
                         document.getElementById('bdArchArea').innerText = "0";
                         document.getElementById('bdTotArea').innerText = "0";
-                        document.getElementById('customArea').value = "0.00";
                     }
 
-                    calculateValues();
+                    // 수신 완료 후 체크된 모드로 입력창 세팅
+                    switchMode(document.querySelector('input[name="calcMode"]:checked').value);
                 }).catch(err => {
                     console.error(err);
                     document.getElementById('loadingMsg').classList.add('hidden');
@@ -251,7 +297,9 @@ HTML_TEMPLATE = """
             let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
             if (isNaN(kwCostInput) || kwCostInput <= 0) kwCostInput = 800000;
             
-            let unitPrice = 130 + 70 * 1.5; // 지붕 가중치 고정
+            const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
+            // 대지 가중치 1.2, 지붕/연면적 가중치 1.5 분기 연산
+            let unitPrice = (currentMode === 'land') ? (130 + 70 * 1.2) : (130 + 70 * 1.5);
             
             const annualGeneration = kw * 3.6 * 365;
             const annualRevenue = annualGeneration * unitPrice;
@@ -273,7 +321,7 @@ HTML_TEMPLATE = """
                 document.getElementById('paybackLabel').innerText = "-";
             }
 
-            let rentUnitPrice = 35000; // 지붕임대 단가 고정
+            let rentUnitPrice = (currentMode === 'land') ? 30000 : 35000;
             document.getElementById('rentAnnual').innerText = Math.round(kw * rentUnitPrice).toLocaleString();
             document.getElementById('rentMonthly').innerText = Math.round((kw * rentUnitPrice) / 12).toLocaleString();
         }
@@ -291,7 +339,7 @@ def api_analyze():
     addr = request.args.get('address', '')
     
     out_data = {
-        "building_success": False, "arch_area": 0.0, "tot_area": 0.0,
+        "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
         "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
     }
     
@@ -326,50 +374,47 @@ def api_analyze():
                 out_data["bun"] = bun
                 out_data["ji"] = ji
 
-                # 3. 국토부 건축물대장 호출 (인코딩 우회 처리)
+                # 국토부 건축물대장 정밀 원본 다이렉트 바인딩
                 if DATA_GO_KR_KEY:
-                    # 공공데이터포털 인코딩 오류 차단용 세션(Session) 객체 및 Raw URL 조립 구조로 변경
                     s = requests.Session()
                     bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-                    
-                    # 파라미터를 파이썬이 재인코딩하지 못하도록 직접 스트링으로 연결하여 찌름
                     raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=1&pageNo=1"
                     
                     bld_res = s.get(raw_full_url, timeout=5)
                     
                     if bld_res.status_code == 200:
-                        # 정상 데이터를 받았을 때만 파싱
                         if "archArea" in bld_res.text or "archarea" in bld_res.text:
                             root = ET.fromstring(bld_res.text)
                             
-                            # 공공데이터 리턴 상태값 체크
                             result_code = root.find('.//resultCode')
                             if result_code is not None and result_code.text != "00":
                                 result_msg = root.find('.//resultMsg')
-                                out_data["error_msg"] = result_msg.text if result_msg is not None else "공공데이터포털키에러"
+                                out_data["error_msg"] = result_msg.text if result_msg is not None else "API 키 매칭 오류"
                                 return jsonify(out_data)
                                 
+                            plat_node = root.find('.//platArea') or root.find('.//platarea')
                             arch_node = root.find('.//archArea') or root.find('.//archarea')
                             tot_node = root.find('.//totArea') or root.find('.//totarea')
                             
+                            plat_val = float(plat_node.text) if plat_node is not None and plat_node.text else 0.0
                             arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
                             tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
                             
-                            if arch_val > 0 or tot_val > 0:
+                            if plat_val > 0 or arch_val > 0 or tot_val > 0:
                                 out_data["building_success"] = True
+                                out_data["plat_area"] = plat_val
                                 out_data["arch_area"] = arch_val
                                 out_data["tot_area"] = tot_val
                         else:
                             if "resultMsg" in bld_res.text:
                                 root = ET.fromstring(bld_res.text)
                                 msg = root.find('.//resultMsg')
-                                out_data["error_msg"] = msg.text if msg is not None else "키오류 또는 데이터부재"
+                                out_data["error_msg"] = msg.text if msg is not None else "데이터 부재"
                     else:
-                        out_data["error_msg"] = f"국토부서버응답실패({bld_res.status_code})"
+                        out_data["error_msg"] = f"통신장애({bld_res.status_code})"
 
     except Exception as e:
         out_data["error_msg"] = str(e)
-        print(f"API Error: {e}")
 
     return jsonify(out_data)
 
