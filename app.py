@@ -74,11 +74,7 @@ HTML_TEMPLATE = """
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
                         <span class="text-[10px] text-gray-500 block mb-1">건축 면적</span>
                         <span id="bdArchArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
-                    </div>
-                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block mb-1">건물 연면적</span>
-                        <span id="bdTotArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
-                    </div>
+                    </div>                   
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 text-center">
@@ -95,14 +91,14 @@ HTML_TEMPLATE = """
 
             <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-md text-center">
                 <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
-                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
+                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기(필수)
                 </a>
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
