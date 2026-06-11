@@ -76,7 +76,7 @@ HTML_TEMPLATE = """
                 <div class="flex flex-col sm:flex-row gap-2.5 mb-4">
                     <label class="flex-1 bg-gray-950 border border-gray-800 p-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer hover:border-gray-700">
                         <input type="radio" name="calcMode" value="plat" checked onchange="switchMode('plat')" class="accent-blue-500 w-4 h-4">
-                        <span class="text-xs md:text-sm text-gray-300 font-medium">🌳 나대지/마당 (가중치 1.2)</span>
+                        <span class="text-xs md:text-sm text-gray-300 font-medium">🌳 나대지/마당 (가중치 1.0)</span>
                     </label>
                     <label class="flex-1 bg-gray-950 border border-gray-800 p-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer hover:border-gray-700">
                         <input type="radio" name="calcMode" value="arch" onchange="switchMode('arch')" class="accent-emerald-400 w-4 h-4">
