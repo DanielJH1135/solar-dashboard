@@ -74,12 +74,16 @@ HTML_TEMPLATE = """
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
                         <span class="text-[10px] text-gray-500 block mb-1">건축 면적</span>
                         <span id="bdArchArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
-                    </div>                   
+                    </div>
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-1">건물 연면적</span>
+                        <span id="bdTotArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 text-center">
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block mb-0.5">건물 주용도</span>
+                        <span class="text-[10px] text-gray-500 block mb-0.5">建物 주용도</span>
                         <span id="bdMainPurps" class="text-xs font-bold text-amber-400">-</span>
                     </div>
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
@@ -105,7 +109,7 @@ HTML_TEMPLATE = """
                 
                 <div class="p-5 flex flex-col gap-4">
                     
-                    <div class="grid grid-cols-3 gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-850">
+                    <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
                             <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500 mb-1">
                             <span class="text-[10px] text-gray-400 font-medium">대지(마당)</span>
@@ -114,14 +118,10 @@ HTML_TEMPLATE = """
                             <input type="radio" name="calcMode" value="roof" onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
                             <span class="text-[10px] text-gray-400 font-medium">건물 지붕</span>
                         </label>
-                        <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="totarea" onchange="switchMode('totarea')" class="accent-purple-400 mb-1">
-                            <span class="text-[10px] text-gray-400 font-medium">건물 연면적</span>
-                        </label>
                     </div>
                     
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex items-center justify-between">
-                        <span class="text-xs text-gray-500" id="inputLabel">가용 실측 면적 입력 (㎡)</span>
+                        <span class="text-xs text-gray-500" id="inputLabel">마당 가용 면적 입력 (㎡)</span>
                         <input type="number" id="customArea" oninput="calculateValues()" class="w-32 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
                     </div>
 
@@ -225,9 +225,6 @@ HTML_TEMPLATE = """
             } else if (mode === 'roof') {
                 areaInput.value = rawArchArea > 0 ? rawArchArea.toFixed(2) : "0.00";
                 document.getElementById('inputLabel').innerText = "지붕 가용 면적 입력 (㎡)";
-            } else if (mode === 'totarea') {
-                areaInput.value = rawTotArea > 0 ? rawTotArea.toFixed(2) : "0.00";
-                document.getElementById('inputLabel').innerText = "건물 연면적 기준 입력 (㎡)";
             }
             calculateValues();
         }
@@ -385,13 +382,11 @@ def api_analyze():
 
                 if DATA_GO_KR_KEY:
                     bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-                    # 🚨 2번 피드백 반영: numOfRows=50으로 넉넉하게 설정하여 모든 동을 다 끌어오도록 조치
                     raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     
                     s = requests.Session()
                     bld_res = s.get(raw_full_url, timeout=5)
                     
-                    # 🚨 4번 피드백 반영: 완벽한 실무 추적용 디버깅 전용 로그 탑재
                     print("="*50)
                     print(f"주소: {addr}")
                     print(f"sigungu: {sigungu_cd} | bjdong: {bjdong_cd} | bun: {bun} | ji: {ji}")
@@ -401,13 +396,10 @@ def api_analyze():
                     print("="*50)
 
                     if bld_res.status_code == 200:
-                        # 🚨 3번 피드백 반영: 네임스페이스 제거용 파싱 로직 적용
-                        # XML 본문의 꼬리표(xmlns/ns2 등)를 글자 자체에서 지워버려서 무력화시킵니다.
                         try:
                             xml_clean = bld_res.text.encode('utf-8')
                             root = ET.fromstring(xml_clean)
                         except Exception as parse_err:
-                            # 만약 특정 네임스페이스 정의가 깨져있을 경우를 대비한 완전 차폐 파싱
                             xml_clean = bld_res.text.replace('xmlns=', 'xmlIgnore=').encode('utf-8')
                             root = ET.fromstring(xml_clean)
 
@@ -417,8 +409,6 @@ def api_analyze():
                             out_data["error_msg"] = result_msg.text if result_msg is not None else "API 키 또는 기관 서버 오류"
                             return jsonify(out_data)
 
-                        # 🚨 2번 피드백 반영: numOfRows=50으로 긁어온 모든 item 동(동별 면적) 순회 및 전수 합산
-                        # Namespace가 붙어있어도 매칭될 수 있도록 로컬네임 태그 탐색 활용
                         items = root.findall('.//item')
                         
                         total_plat = 0.0
@@ -428,13 +418,12 @@ def api_analyze():
                         date_list = []
 
                         for item in items:
-                            # 각 item 내부의 노드를 네임스페이스 무관하게 찾기 위해 수동 순회 검색
                             plat_val = 0.0
                             arch_val = 0.0
                             tot_val = 0.0
                             
                             for child in item:
-                                tag_local = child.tag.split('}')[-1] # ns2:archArea 에서 archArea만 발라냄
+                                tag_local = child.tag.split('}')[-1] 
                                 if tag_local == 'platArea':
                                     plat_val = float(child.text) if child.text else 0.0
                                 elif tag_local == 'archArea':
@@ -446,8 +435,7 @@ def api_analyze():
                                 elif tag_local == 'useAprvDate' and child.text:
                                     if child.text not in date_list: date_list.append(child.text)
                             
-                            # 여러 동의 면적을 누적 합산 (대표 지번의 전체 캐파 반영)
-                            if plat_val > total_plat: total_plat = plat_val # 대지면적은 중복될 수 있으므로 최댓값 기준 매칭
+                            if plat_val > total_plat: total_plat = plat_val 
                             total_arch += arch_val
                             total_tot += tot_val
 
