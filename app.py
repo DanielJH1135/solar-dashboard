@@ -340,10 +340,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
 @app.route('/api/analyze')
 def api_analyze():
     addr = request.args.get('address', '')
@@ -401,27 +397,23 @@ def api_analyze():
                     
                     char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
                     
-                    # 📌 친구분 조언대로 터미널에 디버깅 로그 출력
                     print("===== [DEBUG] LAND API =====")
                     print(f"Status Code: {char_res.status_code}")
                     try:
                         char_json = char_res.json()
-                        print("Response JSON:")
-                        print(char_json) # 구조 확인용
-                        
+                        print(char_json)
                         if char_res.status_code == 200:
-                            # VWorld NED API 응답 구조체 파싱 (일반 데이터 API와 다를 수 있음)
                             res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
                             if res_body:
                                 props = res_body[0].get("properties", {})
                                 out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
                                 area_val = props.get("lndpclAr", 0)
                                 out_data["vworld_area"] = float(area_val) if area_val else 0.0
-                                out_data["vworld_success"] = True # 토지특성정보 성공 시 1차 성공 처리
+                                out_data["vworld_success"] = True
                     except Exception as json_e:
                         print(f"JSON Parsing Error (Land API): {json_e}")
 
-                # 2. 브이월드 연속지적도 API (공시지가 획득) - HTTPS 적용
+                # 2. 브이월드 연속지적도 API (공시지가 획득)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -435,31 +427,27 @@ def api_analyze():
                         "key": VWORLD_API_KEY,
                         "domain": VWORLD_DOMAIN.replace("https://", "").replace("http://", "")
                     }
-                    
                     v_headers = {
                         "User-Agent": "Mozilla/5.0",
                         "Referer": f"https://{VWORLD_DOMAIN.replace('https://', '').replace('http://', '')}"
                     }
                     
                     v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
-                    
                     if v_res.status_code == 200:
                         v_json = v_res.json()
                         response_block = v_json.get("response", {})
-                        
                         if response_block.get("status") != "ERROR":
                             features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
                             if features:
                                 props = features[0].get("properties", {})
                                 jiga_val = props.get("jiga", 0)
                                 out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                # 공시지가까지 정상 조회되면 확실하게 True 보장
                                 out_data["vworld_success"] = True
-
-                # 3. 국토부 건축물대장 호출
+                                
+                # 3. 국토부 건축물대장 호출 (디버깅 로그 추가)
                 if DATA_GO_KR_KEY:
                     bld_params = {
-                        'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
+                        'serviceKey': DATA_GO_KR_KEY, # unquote 제거하여 키 원본 사용
                         'sigunguCd': sigungu_cd, 
                         'bjdongCd': bjdong_cd, 
                         'platGbCd': molit_plat_gb,
@@ -469,12 +457,20 @@ def api_analyze():
                         'pageNo': '1'
                     }
                     bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
-                    if bld_res.status_code == 200 and "<archArea>" in bld_res.text:
+                    
+                    print("===== [DEBUG] BUILDING API =====")
+                    print(f"Status Code: {bld_res.status_code}")
+                    print(bld_res.text[:1000]) # XML 응답 확인
+                    
+                    if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
                         root = ET.fromstring(bld_res.text)
-                        arch_node = root.find('.//archArea')
-                        tot_node = root.find('.//totArea')
+                        # 대소문자 구분을 피하기 위해 소문자 태그나 전체 노드 검색 수행
+                        arch_node = root.find('.//archArea') or root.find('.//archarea')
+                        tot_node = root.find('.//totArea') or root.find('.//totarea')
+                        
                         arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
                         tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
+                        
                         if arch_val > 0 or tot_val > 0:
                             out_data["building_success"] = True
                             out_data["arch_area"] = arch_val
@@ -484,6 +480,6 @@ def api_analyze():
         print(f"API Error: {e}")
 
     return jsonify(out_data)
-
+    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
