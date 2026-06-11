@@ -5,10 +5,13 @@ import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-# 🔑 정부 API 및 카카오 키 고정
+# 🔑 API 키 설정 (VWORLD_API_KEY와 VWORLD_DOMAIN을 대표님 정보로 채워주세요)
 DATA_GO_KR_KEY = "c838a8d8130510cdb26146fc24b4d5671daddae3b0a25d969a0d2984a57f0308"
 kakao_rest_key = "eee2dd15c07cf4a1660324a1f26848ea"
 kakao_js_key = "6bf846817be3a6a8d8e09a566d264c90"
+
+VWORLD_API_KEY = "2175D91D-18D8-3F33-80D1-6A75013C849C"
+VWORLD_DOMAIN = "https://solar-dashboard-daegu.vercel.app/" # 나중에 Vercel 도메인(https://xxx.vercel.app)으로 변경하세요
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -17,12 +20,12 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>대구지사 태양광 부지 분석 플랫폼</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        .map-container { min-height: 350px; height: 40vh; }
-        @media (min-width: 1024px) { .map-container { height: 100%; min-height: 650px; } }
+        .map-container { min-height: 400px; height: 50vh; }
+        @media (min-width: 1024px) { .map-container { height: 100%; min-height: 600px; } }
     </style>
 </head>
 <body class="p-4 md:p-6 max-w-7xl mx-auto">
@@ -32,7 +35,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 분석 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">상호명 키워드 조회 및 3평당 1kW 실무 규격 매핑 완료 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld 지적도 폴리곤 및 국토부 건축물대장 통합 엔진</p>
         </div>
     </header>
 
@@ -40,332 +43,216 @@ HTML_TEMPLATE = """
         <div class="relative flex-grow">
             <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-500"></i>
             <input type="text" id="addressInput" value="대구광역시 수성구 범어동 1" 
-                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base"
-                   placeholder="지번 주소 또는 상호명(예: 건물 이름)을 입력하세요">
+                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base">
         </div>
-        <button id="btnAnalyze" onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm md:text-base whitespace-nowrap">
+        <button onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-magnifying-glass-chart"></i> 통합 부지 분석
         </button>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <div class="lg:col-span-5 flex flex-col gap-6">
+        <div class="lg:col-span-5 flex flex-col gap-4">
             
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 shadow-xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-gray-400 text-xs font-semibold tracking-wider uppercase flex items-center gap-2">
-                        <i class="fa-solid fa-sliders text-emerald-400"></i> 1단계: 가용 면적 및 변수 설정
-                    </h2>
-                    <span id="apiStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">대기중</span>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="bg-gray-950 border border-gray-800 p-3 rounded-xl border-l-4 border-l-blue-500">
-                        <span class="text-[11px] text-gray-500 block">대지면적</span>
-                        <span id="platArea" class="text-base font-bold text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-map-location-dot"></i> VWorld 토지 지적 정보
+                </h3>
+                <div class="grid grid-cols-2 gap-3 text-center mb-3">
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
+                        <span class="text-[11px] text-gray-500 block mb-1">법정 지목</span>
+                        <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
                     </div>
-                    <div class="bg-gray-950 border border-gray-800 p-3 rounded-xl border-l-4 border-l-emerald-500">
-                        <span class="text-[11px] text-gray-500 block">건축면적</span>
-                        <span id="archArea" class="text-base font-bold text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
+                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
+                        <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
-
-                <div class="flex gap-2.5 mb-4">
-                    <label class="flex-1 bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center gap-2 cursor-pointer hover:border-gray-700">
-                        <input type="radio" name="calcMode" value="plat" checked onchange="switchMode('plat')" class="accent-blue-500">
-                        <span class="text-xs text-gray-300 font-medium">🌳 나대지/마당 기준</span>
-                    </label>
-                    <label class="flex-1 bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center gap-2 cursor-pointer hover:border-gray-700">
-                        <input type="radio" name="calcMode" value="arch" onchange="switchMode('arch')" class="accent-emerald-400">
-                        <span class="text-xs text-gray-300 font-medium">🏢 지붕/옥상 기준</span>
-                    </label>
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex justify-between items-center">
+                    <span class="text-[11px] text-gray-500 block">개별 공시지가 (㎡당)</span>
+                    <div><span id="vwJiga" class="text-sm font-bold text-white">0</span> <span class="text-[11px] text-gray-400">원</span></div>
                 </div>
+            </div>
 
-                <div class="mb-4">
-                    <label class="text-xs text-gray-500 block mb-1.5" id="inputLabel">가용 실측 면적 수정 (㎡)</label>
-                    <input type="number" id="customArea" oninput="calculateValues()" class="w-full bg-gray-950 border-2 border-gray-800 focus:border-emerald-500 rounded-xl px-4 py-2 text-white font-bold focus:outline-none text-sm">
-                </div>
-
-                <div class="mb-4">
-                    <label class="text-xs text-amber-400 font-semibold block mb-1.5">
-                        <i class="fa-solid fa-money-bill-wave mr-1"></i> kW당 공사 단가 커스텀 설정 (원)
-                    </label>
-                    <input type="number" id="kwCostInput" value="800000" min="800000" step="10000" oninput="calculateValues()" 
-                           class="w-full bg-gray-950 border-2 border-amber-900/40 focus:border-amber-500 rounded-xl px-4 py-2 text-amber-400 font-black focus:outline-none text-sm shadow-inner">
-                    <span class="text-[10px] text-gray-500 block mt-1">* 하한 800,000원 고정이며 위로는 자유롭게 상향 조정 가능합니다.</span>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 bg-gray-950 p-3 rounded-xl border border-gray-850 text-center">
-                    <div>
-                        <span class="text-gray-500 text-[10px] block">환산 평수</span>
-                        <span class="text-sm font-bold text-gray-300" id="resPyeong">0.00 평</span>
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-building"></i> 국토부 건축물대장 정보
+                </h3>
+                <div class="grid grid-cols-2 gap-3 text-center">
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
+                        <span class="text-[11px] text-gray-500 block mb-1">건축 면적</span>
+                        <span id="bdArchArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
-                    <div>
-                        <span class="text-gray-500 text-[10px] block">실무 가용 용량</span>
-                        <span class="text-sm font-black text-emerald-400" id="resKw">0.00 kW</span>
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
+                        <span class="text-[11px] text-gray-500 block mb-1">연면적</span>
+                        <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-gradient-to-br from-gray-900 to-slate-900 border border-gray-800 rounded-2xl p-4 shadow-xl">
-                <div class="flex items-center gap-3">
-                    <div class="bg-amber-950/50 border border-amber-800/60 p-2.5 rounded-xl text-amber-400">
-                        <i class="fa-solid fa-building-shield text-base"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-xs font-bold text-white">⚙️ 리스 금융 방식 (소유권 이전형)</h3>
-                        <p class="text-[11px] text-gray-400 mt-0.5">본사 자본 금융 심사 승인 필요</p>
-                    </div>
+            <div class="bg-gray-900 border-2 border-amber-900/40 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-xs font-bold text-amber-400 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-bolt"></i> 태양광 실무 용량 시뮬레이터 (3평 = 1kW)
+                </h3>
+                <div class="flex gap-2 mb-4">
+                    <label class="flex-1 bg-gray-950 border border-gray-800 p-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:border-gray-700">
+                        <input type="radio" name="calcMode" value="land" checked onchange="calcCapacity()" class="accent-blue-500">
+                        <span class="text-xs text-gray-300">토지 기준 (나대지)</span>
+                    </label>
+                    <label class="flex-1 bg-gray-950 border border-gray-800 p-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:border-gray-700">
+                        <input type="radio" name="calcMode" value="roof" onchange="calcCapacity()" class="accent-emerald-400">
+                        <span class="text-xs text-gray-300">건축물 기준 (지붕)</span>
+                    </label>
                 </div>
-                <div class="mt-3 bg-gray-950/60 border border-gray-850 px-3 py-2 rounded-lg text-center text-amber-500 text-xs font-bold">
-                    ⚠️ 리스 금융 조달은 본사 대출 심사팀 별도 문의
+                
+                <div class="bg-gray-950 p-4 rounded-xl border border-gray-850 text-center">
+                    <span class="text-[11px] text-gray-500 block mb-1">예상 설치 가능 용량</span>
+                    <span id="estKw" class="text-3xl font-black text-emerald-400">0.00</span> <span class="text-sm text-gray-400 font-bold">kW</span>
                 </div>
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
-                    🌐 한전ON 공식 실시간 선로 용량 수동 확인하기
-                </a>
             </div>
 
         </div>
 
-        <div class="lg:col-span-7 flex flex-col gap-6">
-            
-            <div class="bg-gradient-to-r from-gray-900 to-emerald-950/20 border border-emerald-900/40 rounded-2xl p-4 shadow-xl">
-                <h2 class="text-emerald-400 text-xs font-bold tracking-wider uppercase mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-bolt text-emerald-400 animate-pulse"></i> 태양광 정밀 예상 발전량 지표 (대구경북 일사량 기준)
-                </h2>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-850 text-center">
-                        <span class="text-[10px] text-gray-500 block mb-0.5">📊 월평균 예상 발전량</span>
-                        <span id="genMonthly" class="text-base font-black text-white">0</span> <span class="text-xs text-gray-400">kWh / 월</span>
-                    </div>
-                    <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-850 text-center">
-                        <span class="text-[10px] text-gray-500 block mb-0.5">☀️ 연간 총 예상 발전량</span>
-                        <span id="genAnnual" class="text-base font-black text-emerald-400">0</span> <span class="text-xs text-gray-400">kWh / 년</span>
+        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex flex-col">
+            <div id="map" class="w-full map-container rounded-xl flex-grow relative">
+                <div id="loadingOverlay" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
+                    <div class="text-emerald-400 font-bold flex flex-col items-center">
+                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
+                        <span>지적도 및 건축물대장 수집 중...</span>
                     </div>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                <div class="bg-gray-900 border-2 border-emerald-500/40 rounded-2xl p-5 shadow-2xl relative bg-gradient-to-b from-emerald-950/10 to-transparent">
-                    <div class="absolute top-0 right-0 bg-emerald-500 text-gray-950 font-black text-[10px] px-2.5 py-1 rounded-bl-xl uppercase tracking-wider">자가 소유</div>
-                    <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-coins text-emerald-400"></i> [1안] RPS 투자형
-                    </h3>
-                    <div class="flex flex-col gap-2.5">
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">🛠️ 실시간 산출 총공사비(예상)</span>
-                            <span id="ownerInvest" class="text-sm font-bold text-white">0</span> <span class="text-xs text-gray-400">만 원</span>
-                        </div>
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">💰 월평균 예상 순수익 (발전량 연동)</span>
-                            <span id="ownerMonthlyProfit" class="text-base font-black text-emerald-400">0</span> <span class="text-xs text-emerald-400">원 / 월</span>
-                        </div>
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850 flex justify-between items-center">
-                            <span class="text-gray-500 text-[10px]">⏳ 투자금 단순 회수 기간(예상)</span>
-                            <span id="paybackLabel" class="text-xs font-bold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900/50">연산중</span>
-                        </div>
-                        <span class="text-[9px] text-gray-500 block text-right">* 부가세 별도 / 초기년도 단순회수 기준</span>
-                    </div>
-                </div>
-
-                <div class="bg-gray-900 border-2 border-blue-500/40 rounded-2xl p-5 shadow-2xl relative bg-gradient-to-b from-blue-950/10 to-transparent">
-                    <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl uppercase tracking-wider">리스크 제로</div>
-                    <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 부지 임대 대여형 (50kW이상)
-                    </h3>
-                    <div class="flex flex-col gap-2.5">
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">📉 소유주 초기 투자 비용</span>
-                            <span class="text-sm font-bold text-blue-400">0원 </span>
-                        </div>
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">🏢 소유주 수령 임대료 (참고용/월)</span>
-                            <span id="rentMonthly" class="text-base font-black text-blue-400">0</span> <span class="text-xs text-blue-400">원 / 월</span>
-                        </div>
-                        <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">🗓️ 소유주 수령 임대료 (연간 고정)</span>
-                            <span id="rentAnnual" class="text-sm font-bold text-white">0</span> <span class="text-xs text-gray-400">원 / 년</span>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex-grow">
-                <div id="map" class="w-full map-container rounded-xl"></div>
-            </div>
-
         </div>
 
     </div>
 
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=""" + kakao_js_key + """&libraries=services"></script>
     <script>
-        let map, marker, geocoder, ps;
-        let globalPlatArea = 0, globalArchArea = 0;
+        let map, marker, ps;
+        let currentPolygon = null;
+        let rawLandArea = 0;
+        let rawArchArea = 0;
 
         document.addEventListener("DOMContentLoaded", function() {
             const mapContainer = document.getElementById('map');
             const defaultPos = new kakao.maps.LatLng(35.8596, 128.6254); 
             
             map = new kakao.maps.Map(mapContainer, { center: defaultPos, level: 2 });
-            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 스카이뷰(위성)
             
-            geocoder = new kakao.maps.services.Geocoder();
-            ps = new kakao.maps.services.Places(); // 🛠️ 상호명 키워드 검색 엔진 결속
-            
+            ps = new kakao.maps.services.Places(); 
             marker = new kakao.maps.Marker({ map: map, position: defaultPos });
-            
-            startAnalysis();
         });
 
-        function switchMode(mode) {
-            if (mode === 'plat') {
-                let netYardArea = globalPlatArea - globalArchArea;
-                document.getElementById('customArea').value = netYardArea > 0 ? netYardArea.toFixed(2) : globalPlatArea.toFixed(2);
-                document.getElementById('inputLabel').innerText = "실측 반영 마당 면적 수정 (㎡)";
-            } else {
-                document.getElementById('customArea').value = globalArchArea.toFixed(2);
-                document.getElementById('inputLabel').innerText = "실측 반영 옥상 면적 수정 (㎡)";
-            }
-            calculateValues();
-        }
-
-        // 🛠️ 카카오 기반 주소/상호명 이중 검색 체인 파이프라인
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
             if(!addr) return;
             
-            document.getElementById('apiStatusBadge').innerText = "위치 탐색중...";
-            document.getElementById('apiStatusBadge').className = "text-[10px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-400 border border-amber-800";
+            document.getElementById('loadingOverlay').classList.remove('hidden');
 
-            // 1단계: 상호명/키워드로 우선 찌르기
             ps.keywordSearch(addr, function(data, status) {
                 if (status === kakao.maps.services.Status.OK) {
                     const place = data[0];
                     const coords = new kakao.maps.LatLng(place.y, place.x);
                     marker.setPosition(coords);
                     map.setCenter(coords);
-                    map.relayout();
-                    
-                    // 상호명 검색으로 도출된 진짜 법정 지번 주소를 파싱하여 백엔드로 전달
-                    const resolvedAddr = place.address_name || place.road_address_name;
-                    fetchDataFromBackend(resolvedAddr);
+                    fetchBackendData(place.address_name || place.road_address_name);
                 } else {
-                    // 상호명 매칭 실패 시 일반 지번 주소 다이렉트 검색 작동 (세컨드 방어선)
+                    const geocoder = new kakao.maps.services.Geocoder();
                     geocoder.addressSearch(addr, function(result, status) {
                         if (status === kakao.maps.services.Status.OK) {
                             const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
                             marker.setPosition(coords);
                             map.setCenter(coords);
-                            map.relayout();
-                            fetchDataFromBackend(addr);
+                            fetchBackendData(addr);
                         } else {
-                            fetchDataFromBackend(addr);
+                            fetchBackendData(addr);
                         }
                     });
                 }
             });
         }
 
-        function fetchDataFromBackend(targetAddr) {
+        function fetchBackendData(targetAddr) {
             fetch(`/api/analyze?address=${encodeURIComponent(targetAddr)}`)
                 .then(res => res.json())
                 .then(data => {
-                    if(data.success && data.official_exists) {
-                        globalPlatArea = data.plat_area;
-                        globalArchArea = data.arch_area;
-                        document.getElementById('platArea').innerText = globalPlatArea.toLocaleString(undefined, {maximumFractionDigits:2});
-                        document.getElementById('archArea').innerText = globalArchArea.toLocaleString(undefined, {maximumFractionDigits:2});
-                        
-                        document.getElementById('apiStatusBadge').innerText = "대장 연동 성공";
-                        document.getElementById('apiStatusBadge').className = "text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800";
-                    } else {
-                        globalPlatArea = 0;
-                        globalArchArea = 0;
-                        document.getElementById('platArea').innerText = "대장 미등록";
-                        document.getElementById('archArea').innerText = "대장 미등록";
-                        
-                        document.getElementById('apiStatusBadge').innerText = "대장 실패 (수동 입력)";
-                        document.getElementById('apiStatusBadge').className = "text-[10px] px-2 py-0.5 rounded font-bold bg-red-950 text-red-400 border border-red-800";
-                    }
+                    document.getElementById('loadingOverlay').classList.add('hidden');
                     
-                    const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
-                    if(currentMode === 'plat') {
-                        let netYardArea = globalPlatArea - globalArchArea;
-                        document.getElementById('customArea').value = netYardArea > 0 ? netYardArea.toFixed(2) : 0;
+                    // VWorld 데이터 매핑
+                    if(data.vworld_success) {
+                        rawLandArea = data.vworld_area;
+                        document.getElementById('vwJimok').innerText = data.vworld_jimok;
+                        document.getElementById('vwArea').innerText = rawLandArea.toLocaleString();
+                        document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
+                        
+                        // 폴리곤 그리기
+                        drawPolygon(data.vworld_geom);
                     } else {
-                        document.getElementById('customArea').value = globalArchArea > 0 ? globalArchArea.toFixed(2) : 0;
+                        rawLandArea = 0;
+                        document.getElementById('vwJimok').innerText = "조회 실패";
+                        document.getElementById('vwArea').innerText = "0";
+                        document.getElementById('vwJiga').innerText = "0";
+                        if(currentPolygon) currentPolygon.setMap(null);
                     }
-                    calculateValues();
+
+                    // 국토부 건축물 데이터 매핑
+                    if(data.building_success) {
+                        rawArchArea = data.arch_area;
+                        document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
+                        document.getElementById('bdTotArea').innerText = data.tot_area.toLocaleString();
+                    } else {
+                        rawArchArea = 0;
+                        document.getElementById('bdArchArea').innerText = "0";
+                        document.getElementById('bdTotArea').innerText = "0";
+                    }
+
+                    calcCapacity();
                 }).catch(err => {
                     console.error(err);
-                    document.getElementById('apiStatusBadge').innerText = "수동 연산 모드";
+                    document.getElementById('loadingOverlay').classList.add('hidden');
                 });
         }
 
-        function calculateValues() {
-            let currentArea = parseFloat(document.getElementById('customArea').value);
-            if(isNaN(currentArea) || currentArea < 0) currentArea = 0;
+        function drawPolygon(geom) {
+            if (currentPolygon) currentPolygon.setMap(null);
+            if (!geom || !geom.coordinates) return;
+
+            // MultiPolygon 배열 파싱
+            let paths = [];
+            // VWorld MultiPolygon 구조: [[[ [lon, lat], [lon, lat] ... ]]]
+            const coordsArray = geom.coordinates[0][0]; 
+
+            for (let i = 0; i < coordsArray.length; i++) {
+                paths.push(new kakao.maps.LatLng(coordsArray[i][1], coordsArray[i][0])); // 위도, 경도 순서 주의
+            }
+
+            currentPolygon = new kakao.maps.Polygon({
+                path: paths,
+                strokeWeight: 3,
+                strokeColor: '#FF0000', // 빨간색 선
+                strokeOpacity: 0.9,
+                fillColor: '#FF8C00',   // 주황색 채우기
+                fillOpacity: 0.3
+            });
+
+            currentPolygon.setMap(map);
+        }
+
+        function calcCapacity() {
+            const mode = document.querySelector('input[name="calcMode"]:checked').value;
+            let targetArea = mode === 'land' ? rawLandArea : rawArchArea;
             
-            const pyeong = currentArea / 3.3;
-            // 🛠️ 가용 평수 보정: 300평 입력 시 정확히 100kW가 매핑되도록 보정 계수를 3.0평으로 전격 칼질
+            // 토지 기준일 경우, 대지면적에서 건축면적을 빼서 실제 가용 마당 면적 도출
+            if (mode === 'land' && rawArchArea > 0 && rawLandArea > rawArchArea) {
+                targetArea = rawLandArea - rawArchArea;
+            }
+
+            // 3.0평(9.9㎡) 당 1kW 기준
+            const pyeong = targetArea / 3.3;
             const kw = pyeong / 3.0;
             
-            // 공사 단가 커스텀 인풋 밸류 연동 (최소 80만원 리미트 방어코드 가동)
-            let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
-            if (isNaN(kwCostInput) || kwCostInput < 800000) {
-                kwCostInput = 800000;
-            }
-            
-            const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
-            let unitPrice = (currentMode === 'plat') ? (130 + 70 * 1.2) : (130 + 70 * 1.5);
-            
-            // ⚡ [복원완료] 발전량 연산 및 시각 노출
-            const annualGeneration = kw * 3.6 * 365;
-            const monthlyGeneration = annualGeneration / 12;
-            
-            document.getElementById('genAnnual').innerText = Math.round(annualGeneration).toLocaleString();
-            document.getElementById('genMonthly').innerText = Math.round(monthlyGeneration).toLocaleString();
-            
-            // 1️⃣ RPS 사업형 수익 산출
-            const annualRevenue = annualGeneration * unitPrice;
-            const monthlyProfit = annualRevenue / 12;
-            
-            // 입력한 커스텀 공사 단가 기준으로 총 공사금액 실시간 업데이트
-            const estimatedCostMan = (kw * kwCostInput) / 10000; 
-            
-            let paybackYears = 0;
-            if (annualRevenue > 0) {
-                paybackYears = (estimatedCostMan * 10000) / annualRevenue;
-            }
-            
-            document.getElementById('resPyeong').innerText = pyeong.toFixed(2) + " 평";
-            document.getElementById('resKw').innerText = kw.toFixed(2) + " kW";
-            document.getElementById('ownerInvest').innerText = Math.round(estimatedCostMan).toLocaleString();
-            document.getElementById('ownerMonthlyProfit').innerText = Math.round(monthlyProfit).toLocaleString();
-            
-            if (paybackYears > 0) {
-                let months = Math.round(paybackYears * 12);
-                let displayY = Math.floor(months / 12);
-                let displayM = months % 12;
-                document.getElementById('paybackLabel').innerText = `약 ${displayY}년 ${displayM}개월`;
-            } else {
-                document.getElementById('paybackLabel').innerText = "연산 불가";
-            }
-
-            // 2️⃣ 부지 임대차 연산
-            let rentUnitPrice = (currentMode === 'plat') ? 30000 : 35000;
-            const rentAnnualProfit = kw * rentUnitPrice;
-            const rentMonthlyProfit = rentAnnualProfit / 12;
-
-            document.getElementById('rentAnnual').innerText = Math.round(rentAnnualProfit).toLocaleString();
-            document.getElementById('rentMonthly').innerText = Math.round(rentMonthlyProfit).toLocaleString();
+            document.getElementById('estKw').innerText = kw.toFixed(2);
         }
     </script>
 </body>
@@ -379,45 +266,94 @@ def index():
 @app.route('/api/analyze')
 def api_analyze():
     addr = request.args.get('address', '')
+    
+    out_data = {
+        "vworld_success": False, "vworld_jimok": "-", "vworld_area": 0.0, "vworld_jiga": 0, "vworld_geom": None,
+        "building_success": False, "arch_area": 0.0, "tot_area": 0.0
+    }
+    
     if not addr:
-        return jsonify({"success": False, "error": "주소가 공란입니다."})
-        
-    response_data = {"success": True, "official_exists": False, "plat_area": 0.0, "arch_area": 0.0}
-    headers = {"Authorization": f"KakaoAK {kakao_rest_key}"}
+        return jsonify(out_data)
+
     try:
-        res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=5)
-        documents = res.json().get('documents', [])
+        # 1. 카카오 주소 검색을 통한 PNU 부품 추출
+        headers = {"Authorization": f"KakaoAK {kakao_rest_key}"}
+        k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
+        documents = k_res.json().get('documents', [])
+        
         if documents:
             addr_info = documents[0].get('address') or documents[0].get('road_address')
-            b_code = addr_info.get('b_code') if addr_info else documents[0]['address'].get('b_code')
-            sigungu_cd, bjdong_cd = b_code[:5], b_code[5:]
-            main_no = documents[0]['address'].get('main_address_no', '') if documents[0].get('address') else addr_info.get('main_address_no', '')
-            sub_no = documents[0]['address'].get('sub_address_no', '') if documents[0].get('address') else addr_info.get('sub_address_no', '')
-            bun, ji = main_no.zfill(4), sub_no.zfill(4) if sub_no else '0000'
-            
-            params = {'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY), 'sigunguCd': sigungu_cd, 'bjdongCd': bjdong_cd, 'bun': bun, 'ji': ji, 'numOfRows': '1', 'pageNo': '1'}
-            bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=params, timeout=7)
-            
-            if bld_res.status_code == 200 and "<platArea>" in bld_res.text:
-                root = ET.fromstring(bld_res.text)
-                plat_node = root.find('.//platArea')
-                arch_node = root.find('.//archArea')
+            if addr_info:
+                # b_code가 시군구(5자리) + 법정동(5자리) = 10자리
+                b_code = addr_info.get('b_code', '0000000000')
+                sigungu_cd = b_code[:5]
+                bjdong_cd = b_code[5:]
                 
-                plat_area = float(plat_node.text) if plat_node is not None and plat_node.text else 0.0
-                arch_area = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
+                main_no = addr_info.get('main_address_no', '')
+                sub_no = addr_info.get('sub_address_no', '')
                 
-                if plat_area > 0 or arch_area > 0:
-                    response_data["official_exists"] = True
-                    response_data["plat_area"] = plat_area
-                    response_data["arch_area"] = arch_area
-            
-            if "범어동 1" in addr and response_data["plat_area"] == 0:
-                response_data["official_exists"] = True
-                response_data["plat_area"] = 1204.85
-                response_data["arch_area"] = 850.40
-    except:
-        pass
-        
-    return jsonify(response_data)
+                bun = main_no.zfill(4)
+                ji = sub_no.zfill(4) if sub_no else '0000'
+                
+                # ⛰️ 산 여부에 따라 대지구분코드 1(일반) 또는 2(산) 설정
+                land_type = '2' if "산" in addr else '1'
+                
+                # 🔑 PNU 조립 (19자리)
+                pnu = f"{sigungu_cd}{bjdong_cd}{land_type}{bun}{ji}"
 
-app = app
+                # 2. VWorld API 호출 (지목, 토지면적, 공시지가, 폴리곤)
+                v_params = {
+                    "service": "data",
+                    "version": "2.0",
+                    "request": "GetFeature",
+                    "data": "LP_PA_CBND_BUBUN",
+                    "key": VWORLD_API_KEY,
+                    "domain": VWORLD_DOMAIN,
+                    "attrFilter": f"pnu:=:{pnu}",
+                    "geometry": "true",
+                    "crs": "EPSG:4326"
+                }
+                
+                if "여기에_발급받은" not in VWORLD_API_KEY:
+                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, timeout=5)
+                    if v_res.status_code == 200:
+                        v_json = v_res.json()
+                        features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
+                        if features:
+                            props = features[0].get("properties", {})
+                            geom = features[0].get("geometry", {})
+                            
+                            out_data["vworld_success"] = True
+                            out_data["vworld_jimok"] = props.get("jimok", "-")
+                            out_data["vworld_area"] = float(props.get("parea", 0.0))
+                            out_data["vworld_jiga"] = int(props.get("jiga", 0))
+                            out_data["vworld_geom"] = geom
+
+                # 3. 국토부 건축물대장 호출 (건축면적, 연면적)
+                bld_params = {
+                    'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
+                    'sigunguCd': sigungu_cd, 'bjdongCd': bjdong_cd, 'bun': bun, 'ji': ji,
+                    'numOfRows': '1', 'pageNo': '1'
+                }
+                bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
+                if bld_res.status_code == 200 and "<archArea>" in bld_res.text:
+                    root = ET.fromstring(bld_res.text)
+                    arch_node = root.find('.//archArea')
+                    tot_node = root.find('.//totArea')
+                    
+                    arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
+                    tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
+                    
+                    if arch_val > 0 or tot_val > 0:
+                        out_data["building_success"] = True
+                        out_data["arch_area"] = arch_val
+                        out_data["tot_area"] = tot_val
+
+    except Exception as e:
+        print(f"API Error: {e}")
+        pass
+
+    return jsonify(out_data)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
