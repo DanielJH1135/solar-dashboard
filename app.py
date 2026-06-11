@@ -385,35 +385,43 @@ def api_analyze():
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                v_success_count = 0
-
                 # 1. 토지특성정보 조회 API (지목, 면적 획득)
                 if VWORLD_API_KEY:
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {
                         "key": VWORLD_API_KEY,
-                        "domain": VWORLD_DOMAIN,
+                        "domain": VWORLD_DOMAIN.replace("https://", "").replace("http://", ""),
                         "pnu": pnu,
                         "format": "json"
                     }
                     char_headers = {
                         "User-Agent": "Mozilla/5.0",
-                        "Referer": f"https://{VWORLD_DOMAIN}" if "http" not in VWORLD_DOMAIN else VWORLD_DOMAIN
+                        "Referer": f"https://{VWORLD_DOMAIN.replace('https://', '').replace('http://', '')}"
                     }
                     
                     char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
                     
-                    if char_res.status_code == 200:
+                    # 📌 친구분 조언대로 터미널에 디버깅 로그 출력
+                    print("===== [DEBUG] LAND API =====")
+                    print(f"Status Code: {char_res.status_code}")
+                    try:
                         char_json = char_res.json()
-                        res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
-                        if res_body:
-                            props = res_body[0].get("properties", {})
-                            out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
-                            area_val = props.get("lndpclAr", 0)
-                            out_data["vworld_area"] = float(area_val) if area_val else 0.0
-                            v_success_count += 1
+                        print("Response JSON:")
+                        print(char_json) # 구조 확인용
+                        
+                        if char_res.status_code == 200:
+                            # VWorld NED API 응답 구조체 파싱 (일반 데이터 API와 다를 수 있음)
+                            res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
+                            if res_body:
+                                props = res_body[0].get("properties", {})
+                                out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
+                                area_val = props.get("lndpclAr", 0)
+                                out_data["vworld_area"] = float(area_val) if area_val else 0.0
+                                out_data["vworld_success"] = True # 토지특성정보 성공 시 1차 성공 처리
+                    except Exception as json_e:
+                        print(f"JSON Parsing Error (Land API): {json_e}")
 
-                # 2. 브이월드 연속지적도 API (공시지가 획득)
+                # 2. 브이월드 연속지적도 API (공시지가 획득) - HTTPS 적용
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -425,15 +433,15 @@ def api_analyze():
                         "attribute": "true",
                         "attrFilter": f"pnu:=:{pnu}",
                         "key": VWORLD_API_KEY,
-                        "domain": VWORLD_DOMAIN
+                        "domain": VWORLD_DOMAIN.replace("https://", "").replace("http://", "")
                     }
                     
                     v_headers = {
                         "User-Agent": "Mozilla/5.0",
-                        "Referer": f"https://{VWORLD_DOMAIN}" if "http" not in VWORLD_DOMAIN else VWORLD_DOMAIN
+                        "Referer": f"https://{VWORLD_DOMAIN.replace('https://', '').replace('http://', '')}"
                     }
                     
-                    v_res = requests.get("http://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
                     
                     if v_res.status_code == 200:
                         v_json = v_res.json()
@@ -445,9 +453,8 @@ def api_analyze():
                                 props = features[0].get("properties", {})
                                 jiga_val = props.get("jiga", 0)
                                 out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                
-                if v_success_count > 0:
-                    out_data["vworld_success"] = True
+                                # 공시지가까지 정상 조회되면 확실하게 True 보장
+                                out_data["vworld_success"] = True
 
                 # 3. 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
