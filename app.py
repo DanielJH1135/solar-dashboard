@@ -37,7 +37,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 대시보드 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">국토부 건축물대장 종합 연동 및 3중 면적 시뮬레이터 Ver.</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 및 맵 복원 Ver.</p>
         </div>
     </header>
 
@@ -65,7 +65,8 @@ HTML_TEMPLATE = """
                     <span class="text-[10px] text-gray-500 block mb-0.5">조회 타겟 매칭 지번</span>
                     <span id="targetJibun" class="text-xs font-mono text-gray-300">-</span>
                 </div>
-                <div class="grid grid-cols-3 gap-2 text-center">
+                
+                <div class="grid grid-cols-3 gap-2 text-center mb-3">
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
                         <span class="text-[10px] text-gray-500 block mb-1">대지 면적</span>
                         <span id="bdPlatArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
@@ -79,9 +80,20 @@ HTML_TEMPLATE = """
                         <span id="bdTotArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
                     </div>
                 </div>
+
+                <div class="grid grid-cols-2 gap-2 text-center">
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-0.5">건물 주용도</span>
+                        <span id="bdMainPurps" class="text-xs font-bold text-amber-400">-</span>
+                    </div>
+                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block mb-0.5">사용 승인일</span>
+                        <span id="bdAppPrvlDate" class="text-xs font-bold text-gray-300">-</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
+            <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-md text-center">
                 <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
                     🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
                 </a>
@@ -208,11 +220,9 @@ HTML_TEMPLATE = """
             startAnalysis();
         });
 
-        // 🚨 3가지 모니터링 모드 분기 스위치 작동 연동
         function switchMode(mode) {
             let areaInput = document.getElementById('customArea');
             if (mode === 'land') {
-                // 대지면적에서 건축면적을 빼 가용 마당 산출
                 let netYardArea = rawPlatArea - rawArchArea;
                 areaInput.value = netYardArea > 0 ? netYardArea.toFixed(2) : (rawPlatArea > 0 ? rawPlatArea.toFixed(2) : "0.00");
                 document.getElementById('inputLabel').innerText = "마당 가용 면적 입력 (㎡)";
@@ -269,6 +279,8 @@ HTML_TEMPLATE = """
                         document.getElementById('bdPlatArea').innerText = rawPlatArea.toLocaleString();
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
                         document.getElementById('bdTotArea').innerText = rawTotArea.toLocaleString();
+                        document.getElementById('bdMainPurps').innerText = data.main_purps;
+                        document.getElementById('bdAppPrvlDate').innerText = data.app_prvl_date;
                     } else {
                         rawPlatArea = 0.0;
                         rawArchArea = 0.0;
@@ -277,9 +289,10 @@ HTML_TEMPLATE = """
                         document.getElementById('bdPlatArea').innerText = "0";
                         document.getElementById('bdArchArea').innerText = "0";
                         document.getElementById('bdTotArea').innerText = "0";
+                        document.getElementById('bdMainPurps').innerText = "-";
+                        document.getElementById('bdAppPrvlDate').innerText = "-";
                     }
 
-                    // 수신 완료 후 체크된 모드로 입력창 세팅
                     switchMode(document.querySelector('input[name="calcMode"]:checked').value);
                 }).catch(err => {
                     console.error(err);
@@ -298,7 +311,6 @@ HTML_TEMPLATE = """
             if (isNaN(kwCostInput) || kwCostInput <= 0) kwCostInput = 800000;
             
             const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
-            // 대지 가중치 1.2, 지붕/연면적 가중치 1.5 분기 연산
             let unitPrice = (currentMode === 'land') ? (130 + 70 * 1.2) : (130 + 70 * 1.5);
             
             const annualGeneration = kw * 3.6 * 365;
@@ -340,6 +352,7 @@ def api_analyze():
     
     out_data = {
         "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
+        "main_purps": "-", "app_prvl_date": "-",
         "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
     }
     
@@ -374,47 +387,89 @@ def api_analyze():
                 out_data["bun"] = bun
                 out_data["ji"] = ji
 
-                # 국토부 건축물대장 정밀 원본 다이렉트 바인딩
                 if DATA_GO_KR_KEY:
-                    s = requests.Session()
                     bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-                    raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=1&pageNo=1"
+                    # 🚨 2번 피드백 반영: numOfRows=50으로 넉넉하게 설정하여 모든 동을 다 끌어오도록 조치
+                    raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     
+                    s = requests.Session()
                     bld_res = s.get(raw_full_url, timeout=5)
                     
+                    # 🚨 4번 피드백 반영: 완벽한 실무 추적용 디버깅 전용 로그 탑재
+                    print("="*50)
+                    print(f"주소: {addr}")
+                    print(f"sigungu: {sigungu_cd} | bjdong: {bjdong_cd} | bun: {bun} | ji: {ji}")
+                    print(f"요청 URL: {raw_full_url}")
+                    print(f"국토부 응답 원문 상태코드: {bld_res.status_code}")
+                    print(f"국토부 응답 원문 텍스트 (앞 3000자):\n{bld_res.text[:3000]}")
+                    print("="*50)
+
                     if bld_res.status_code == 200:
-                        if "archArea" in bld_res.text or "archarea" in bld_res.text:
-                            root = ET.fromstring(bld_res.text)
+                        # 🚨 3번 피드백 반영: 네임스페이스 제거용 파싱 로직 적용
+                        # XML 본문의 꼬리표(xmlns/ns2 등)를 글자 자체에서 지워버려서 무력화시킵니다.
+                        try:
+                            xml_clean = bld_res.text.encode('utf-8')
+                            root = ET.fromstring(xml_clean)
+                        except Exception as parse_err:
+                            # 만약 특정 네임스페이스 정의가 깨져있을 경우를 대비한 완전 차폐 파싱
+                            xml_clean = bld_res.text.replace('xmlns=', 'xmlIgnore=').encode('utf-8')
+                            root = ET.fromstring(xml_clean)
+
+                        result_code = root.find('.//resultCode') or root.find('*/resultCode')
+                        if result_code is not None and result_code.text != "00":
+                            result_msg = root.find('.//resultMsg')
+                            out_data["error_msg"] = result_msg.text if result_msg is not None else "API 키 또는 기관 서버 오류"
+                            return jsonify(out_data)
+
+                        # 🚨 2번 피드백 반영: numOfRows=50으로 긁어온 모든 item 동(동별 면적) 순회 및 전수 합산
+                        # Namespace가 붙어있어도 매칭될 수 있도록 로컬네임 태그 탐색 활용
+                        items = root.findall('.//item')
+                        
+                        total_plat = 0.0
+                        total_arch = 0.0
+                        total_tot = 0.0
+                        purps_list = []
+                        date_list = []
+
+                        for item in items:
+                            # 각 item 내부의 노드를 네임스페이스 무관하게 찾기 위해 수동 순회 검색
+                            plat_val = 0.0
+                            arch_val = 0.0
+                            tot_val = 0.0
                             
-                            result_code = root.find('.//resultCode')
-                            if result_code is not None and result_code.text != "00":
-                                result_msg = root.find('.//resultMsg')
-                                out_data["error_msg"] = result_msg.text if result_msg is not None else "API 키 매칭 오류"
-                                return jsonify(out_data)
-                                
-                            plat_node = root.find('.//platArea') or root.find('.//platarea')
-                            arch_node = root.find('.//archArea') or root.find('.//archarea')
-                            tot_node = root.find('.//totArea') or root.find('.//totarea')
+                            for child in item:
+                                tag_local = child.tag.split('}')[-1] # ns2:archArea 에서 archArea만 발라냄
+                                if tag_local == 'platArea':
+                                    plat_val = float(child.text) if child.text else 0.0
+                                elif tag_local == 'archArea':
+                                    arch_val = float(child.text) if child.text else 0.0
+                                elif tag_local == 'totArea':
+                                    tot_val = float(child.text) if child.text else 0.0
+                                elif tag_local == 'mainPurpsCdNm' and child.text:
+                                    if child.text not in purps_list: purps_list.append(child.text)
+                                elif tag_local == 'useAprvDate' and child.text:
+                                    if child.text not in date_list: date_list.append(child.text)
                             
-                            plat_val = float(plat_node.text) if plat_node is not None and plat_node.text else 0.0
-                            arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
-                            tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
-                            
-                            if plat_val > 0 or arch_val > 0 or tot_val > 0:
-                                out_data["building_success"] = True
-                                out_data["plat_area"] = plat_val
-                                out_data["arch_area"] = arch_val
-                                out_data["tot_area"] = tot_val
+                            # 여러 동의 면적을 누적 합산 (대표 지번의 전체 캐파 반영)
+                            if plat_val > total_plat: total_plat = plat_val # 대지면적은 중복될 수 있으므로 최댓값 기준 매칭
+                            total_arch += arch_val
+                            total_tot += tot_val
+
+                        if total_plat > 0 or total_arch > 0 or total_tot > 0:
+                            out_data["building_success"] = True
+                            out_data["plat_area"] = total_plat
+                            out_data["arch_area"] = total_arch
+                            out_data["tot_area"] = total_tot
+                            out_data["main_purps"] = ", ".join(purps_list) if purps_list else "-"
+                            out_data["app_prvl_date"] = ", ".join(date_list) if date_list else "-"
                         else:
-                            if "resultMsg" in bld_res.text:
-                                root = ET.fromstring(bld_res.text)
-                                msg = root.find('.//resultMsg')
-                                out_data["error_msg"] = msg.text if msg is not None else "데이터 부재"
+                            out_data["error_msg"] = "해당 번지에 조회된 건축물 면적이 0입니다."
                     else:
-                        out_data["error_msg"] = f"통신장애({bld_res.status_code})"
+                        out_data["error_msg"] = f"국토부 응답 실패 ({bld_res.status_code})"
 
     except Exception as e:
         out_data["error_msg"] = str(e)
+        print(f"Critical Api System Error: {e}")
 
     return jsonify(out_data)
 
