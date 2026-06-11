@@ -5,6 +5,7 @@ import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
+# .env 환경변수 로드
 load_dotenv()
 
 app = Flask(__name__)
@@ -13,7 +14,7 @@ DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "https://solar-dashboard-daegu.vercel.app/")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -38,7 +39,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">면적 데이터 예외처리 방어 및 API 통합 마스터 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 및 맵 복원 Ver.</p>
         </div>
     </header>
 
@@ -60,7 +61,7 @@ HTML_TEMPLATE = """
             
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-map-location-dot"></i> 토지 지적 & 특성 정보
+                    <i class="fa-solid fa-map-location-dot"></i> VWorld 토지 지적 정보
                 </h3>
                 <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
                     <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호</span>
@@ -72,7 +73,7 @@ HTML_TEMPLATE = """
                         <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
                     </div>
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">토지 대장 면적</span>
+                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
                         <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
@@ -96,12 +97,6 @@ HTML_TEMPLATE = """
                         <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
-                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
-                </a>
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
@@ -142,7 +137,7 @@ HTML_TEMPLATE = """
                         </h3>
                         
                         <div class="mb-4 bg-gray-950 p-2.5 rounded-lg border border-amber-900/30">
-                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 커스텀 (원)</label>
+                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 조정 (원)</label>
                             <input type="number" id="kwCostInput" value="800000" step="10000" oninput="calculateValues()" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -219,6 +214,7 @@ HTML_TEMPLATE = """
             startAnalysis();
         });
 
+        // 면적 방어 로직 결합
         function switchMode(mode) {
             let areaInput = document.getElementById('customArea');
             if (mode === 'land') {
@@ -266,9 +262,8 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
-                    // 면적 데이터 방어 코드 적용 바인딩
                     if(data.vworld_success) {
-                        // 토지면적(지적)을 안전하게 수신
+                        // 안전한 Float 파싱
                         rawLandArea = data.vworld_area ? parseFloat(data.vworld_area) : 0.0;
                         document.getElementById('vwPnu').innerText = data.pnu;
                         document.getElementById('vwJimok').innerText = data.vworld_jimok;
@@ -276,14 +271,13 @@ HTML_TEMPLATE = """
                         document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
                     } else {
                         rawLandArea = 0.0;
-                        document.getElementById('vwPnu').innerText = data.vworld_error_msg ? `에러: ${data.vworld_error_msg}` : `${data.pnu} (DB 없음)`;
+                        document.getElementById('vwPnu').innerText = data.pnu !== "-" ? data.pnu + " (정보없음)" : "조회 실패";
                         document.getElementById('vwJimok').innerText = "-";
                         document.getElementById('vwArea').innerText = "0";
                         document.getElementById('vwJiga').innerText = "0";
                     }
 
                     if(data.building_success) {
-                        // 건축면적을 안전하게 수신
                         rawArchArea = data.arch_area ? parseFloat(data.arch_area) : 0.0;
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
                         document.getElementById('bdTotArea').innerText = data.tot_area.toLocaleString();
@@ -302,7 +296,7 @@ HTML_TEMPLATE = """
 
         function calculateValues() {
             let currentArea = parseFloat(document.getElementById('customArea').value);
-            if(isNaN(currentArea) || currentArea < 0) currentArea = 0.0;
+            if(isNaN(currentArea) || currentArea <= 0) currentArea = 0.0;
             
             const pyeong = currentArea / 3.3;
             const kw = pyeong / 3.0;
@@ -352,7 +346,6 @@ def api_analyze():
     
     out_data = {
         "vworld_success": False, "pnu": "-", "vworld_jimok": "-", "vworld_area": 0.0, "vworld_jiga": 0,
-        "vworld_error_msg": "", 
         "building_success": False, "arch_area": 0.0, "tot_area": 0.0
     }
     
@@ -374,7 +367,6 @@ def api_analyze():
                 bjdong_cd = b_code[5:]
                 
                 main_no = jibun_info.get('main_address_no', '')
-                main_no = jibun_info.get('main_address_no', '')
                 sub_no = jibun_info.get('sub_address_no', '')
                 
                 bun = main_no.zfill(4) if main_no else '0000'
@@ -392,7 +384,7 @@ def api_analyze():
 
                 v_success_count = 0
 
-                # [API 1] 토지특성정보 조회 API (지목, 면적 획득)
+                # 1. 토지특성정보 조회 API (지목, 면적)
                 if VWORLD_API_KEY:
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {
@@ -406,24 +398,21 @@ def api_analyze():
                         "Referer": f"https://{domain_clean}"
                     }
                     
-                    char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
-                    
-                    if char_res.status_code == 200:
-                        try:
+                    try:
+                        char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
+                        if char_res.status_code == 200:
                             char_json = char_res.json()
                             res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
                             if res_body:
                                 props = res_body[0].get("properties", {})
                                 out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
-                                
-                                # 면적 데이터 추출 안전 장치
                                 area_val = props.get("lndpclAr")
                                 out_data["vworld_area"] = float(area_val) if area_val else 0.0
                                 v_success_count += 1
-                        except Exception as je:
-                            print(f"Land Char JSON Parsing Error: {je}")
+                    except Exception as e:
+                        print(f"Land API Error: {e}")
 
-                # [API 2] 브이월드 연속지적도 API (공시지가 획득)
+                # 2. 브이월드 연속지적도 API (공시지가)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -437,16 +426,14 @@ def api_analyze():
                         "key": VWORLD_API_KEY,
                         "domain": domain_clean
                     }
-                    
                     v_headers = {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                         "Referer": f"https://{domain_clean}"
                     }
                     
-                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
-                    
-                    if v_res.status_code == 200:
-                        try:
+                    try:
+                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                        if v_res.status_code == 200:
                             v_json = v_res.json()
                             response_block = v_json.get("response", {})
                             if response_block.get("status") != "ERROR":
@@ -456,13 +443,13 @@ def api_analyze():
                                     jiga_val = props.get("jiga", 0)
                                     out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
                                     v_success_count += 1
-                        except Exception as ve:
-                            print(f"Cadastral JSON Parsing Error: {ve}")
+                    except Exception as e:
+                        print(f"Cadastral API Error: {e}")
 
                 if v_success_count > 0:
                     out_data["vworld_success"] = True
 
-                # [API 3] 국토부 건축물대장 호출
+                # 3. 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': DATA_GO_KR_KEY, 
@@ -474,20 +461,22 @@ def api_analyze():
                         'numOfRows': '1', 
                         'pageNo': '1'
                     }
-                    bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
-                    
-                    if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
-                        root = ET.fromstring(bld_res.text)
-                        arch_node = root.find('.//archArea') or root.find('.//archarea')
-                        tot_node = root.find('.//totArea') or root.find('.//totarea')
-                        
-                        arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
-                        tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
-                        
-                        if arch_val > 0 or tot_val > 0:
-                            out_data["building_success"] = True
-                            out_data["arch_area"] = arch_val
-                            out_data["tot_area"] = tot_val
+                    try:
+                        bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
+                        if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
+                            root = ET.fromstring(bld_res.text)
+                            arch_node = root.find('.//archArea') or root.find('.//archarea')
+                            tot_node = root.find('.//totArea') or root.find('.//totarea')
+                            
+                            arch_val = float(arch_node.text) if arch_node is not None and arch_node.text else 0.0
+                            tot_val = float(tot_node.text) if tot_node is not None and tot_node.text else 0.0
+                            
+                            if arch_val > 0 or tot_val > 0:
+                                out_data["building_success"] = True
+                                out_data["arch_area"] = arch_val
+                                out_data["tot_area"] = tot_val
+                    except Exception as e:
+                        print(f"Building API Error: {e}")
 
     except Exception as e:
         print(f"API Error: {e}")
