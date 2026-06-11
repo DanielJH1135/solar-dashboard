@@ -27,7 +27,6 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        /* 접이식 UI 화살표 숨김 */
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
         .map-container { min-height: 500px; height: 100%; border-radius: 1rem; }
@@ -40,7 +39,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld PNU 정밀 연동 및 맵 복원 마스터 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 정밀 연동 픽스 버전</p>
         </div>
     </header>
 
@@ -148,32 +147,32 @@ HTML_TEMPLATE = """
                                 <span class="font-bold text-white"><span id="ownerInvest">0</span> 만원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월평균 순수익</span>
+                                <span class="text-gray-500">월평균 순수익(참고용)</span>
                                 <span class="font-bold text-emerald-400"><span id="ownerMonthlyProfit">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">단순 회수 기간</span>
+                                <span class="text-gray-500">단순 회수 기간(예상)</span>
                                 <span id="paybackLabel" class="font-bold text-emerald-300">연산중</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">지붕 임대</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">지붕임대</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 임대형
                         </h3>
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
                                 <span class="text-gray-500">초기 투자비용</span>
-                                <span class="font-bold text-blue-400">0원 </span>
+                                <span class="font-bold text-blue-400">0원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월 수령 임대료(참고용)(</span>
+                                <span class="text-gray-500">월 수령 임대료</span>
                                 <span class="font-bold text-white"><span id="rentMonthly">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">연 수령 임대료(예상)</span>
+                                <span class="text-gray-500">연 수령 임대료</span>
                                 <span class="font-bold text-white"><span id="rentAnnual">0</span> 원</span>
                             </div>
                         </div>
@@ -261,7 +260,6 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
-                    // VWorld 텍스트 데이터 바인딩
                     if(data.vworld_success) {
                         rawLandArea = data.vworld_area;
                         document.getElementById('vwPnu').innerText = data.pnu;
@@ -276,7 +274,6 @@ HTML_TEMPLATE = """
                         document.getElementById('vwJiga').innerText = "0";
                     }
 
-                    // 건축물대장 텍스트 데이터 바인딩
                     if(data.building_success) {
                         rawArchArea = data.arch_area;
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
@@ -353,13 +350,11 @@ def api_analyze():
         return jsonify(out_data)
 
     try:
-        # 1. 카카오 로컬 API 통신
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
         k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
         documents = k_res.json().get('documents', [])
         
         if documents:
-            # PNU 조립의 핵심 픽스: '도로명 주소'가 아닌 '순수 지번 주소(address)' 타겟팅
             jibun_info = documents[0].get('address')
             
             if jibun_info:
@@ -373,15 +368,17 @@ def api_analyze():
                 bun = main_no.zfill(4) if main_no else '0000'
                 ji = sub_no.zfill(4) if sub_no else '0000'
                 
-                # '산' 번지 판별 (지번 주소명 기준)
                 full_jibun_name = jibun_info.get('address_name', '')
-                land_type = '2' if "산" in full_jibun_name else '1'
                 
-                # 19자리 PNU 완벽 생성
-                pnu = f"{sigungu_cd}{bjdong_cd}{land_type}{bun}{ji}"
+                # 규격 분기 1: VWorld용 PNU (1:일반, 2:산)
+                pnu_land_type = '2' if "산" in full_jibun_name else '1'
+                
+                # 규격 분기 2: 국토부 대지구분코드 (0:대지, 1:산)
+                molit_plat_gb = '1' if "산" in full_jibun_name else '0'
+                
+                pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                # 2. VWorld API 호출 (1단계 텍스트 추출용 geometry=false)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -406,12 +403,16 @@ def api_analyze():
                             out_data["vworld_area"] = float(props.get("parea", 0.0))
                             out_data["vworld_jiga"] = int(props.get("jiga", 0))
 
-                # 3. 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
-                        'sigunguCd': sigungu_cd, 'bjdongCd': bjdong_cd, 'bun': bun, 'ji': ji,
-                        'numOfRows': '1', 'pageNo': '1'
+                        'sigunguCd': sigungu_cd, 
+                        'bjdongCd': bjdong_cd, 
+                        'platGbCd': molit_plat_gb,  # 국토부 전용 대지구분 필수 파라미터 적용
+                        'bun': bun, 
+                        'ji': ji,
+                        'numOfRows': '1', 
+                        'pageNo': '1'
                     }
                     bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
                     if bld_res.status_code == 200 and "<archArea>" in bld_res.text:
