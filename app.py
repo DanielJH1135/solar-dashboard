@@ -5,6 +5,7 @@ import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
+# .env 환경변수 로드
 load_dotenv()
 
 app = Flask(__name__)
@@ -26,6 +27,7 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
+        /* 접이식 UI 화살표 숨김 */
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
         .map-container { min-height: 500px; height: 100%; border-radius: 1rem; }
@@ -38,7 +40,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld 연속지적도 & 토지특성조회 교차 연동 Ver.</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld 토지특성정보 & 건축물대장 통합 관제 시스템</p>
         </div>
     </header>
 
@@ -63,8 +65,8 @@ HTML_TEMPLATE = """
                     <i class="fa-solid fa-map-location-dot"></i> 토지 지적 & 특성 정보
                 </h3>
                 <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
-                    <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호 / 상태</span>
-                    <span id="vwPnu" class="text-sm font-mono font-bold text-amber-500">-</span>
+                    <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호</span>
+                    <span id="vwPnu" class="text-sm font-mono text-gray-300">-</span>
                 </div>
                 <div class="grid grid-cols-2 gap-3 text-center mb-3">
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
@@ -72,7 +74,7 @@ HTML_TEMPLATE = """
                         <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
                     </div>
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">토지 대장 면적</span>
+                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
                         <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
@@ -96,6 +98,12 @@ HTML_TEMPLATE = """
                         <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
+                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
+                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
+                </a>
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
@@ -157,7 +165,7 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대형</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대(50kW이상)
                         </h3>
@@ -185,7 +193,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 PNU 연동 중...</span>
+                        <span>데이터 수집 및 분석 중...</span>
                     </div>
                 </div>
             </div>
@@ -259,7 +267,6 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
-                    // VWorld & 국토부 토지 데이터 통합 바인딩
                     if(data.vworld_success) {
                         rawLandArea = data.vworld_area;
                         document.getElementById('vwPnu').innerText = data.pnu;
@@ -380,7 +387,33 @@ def api_analyze():
 
                 v_success_count = 0
 
-                # [API 1]: VWorld 연속지적도 호출 (공시지가 파싱용)
+                # 1. 토지특성정보 조회 API (지목, 면적 획득)
+                if VWORLD_API_KEY:
+                    char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
+                    char_params = {
+                        "key": VWORLD_API_KEY,
+                        "domain": VWORLD_DOMAIN,
+                        "pnu": pnu,
+                        "format": "json"
+                    }
+                    char_headers = {
+                        "User-Agent": "Mozilla/5.0",
+                        "Referer": f"https://{VWORLD_DOMAIN}" if "http" not in VWORLD_DOMAIN else VWORLD_DOMAIN
+                    }
+                    
+                    char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
+                    
+                    if char_res.status_code == 200:
+                        char_json = char_res.json()
+                        res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
+                        if res_body:
+                            props = res_body[0].get("properties", {})
+                            out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
+                            area_val = props.get("lndpclAr", 0)
+                            out_data["vworld_area"] = float(area_val) if area_val else 0.0
+                            v_success_count += 1
+
+                # 2. 브이월드 연속지적도 API (공시지가 획득)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -406,46 +439,17 @@ def api_analyze():
                         v_json = v_res.json()
                         response_block = v_json.get("response", {})
                         
-                        if response_block.get("status") == "ERROR":
-                            out_data["vworld_error_msg"] = response_block.get("error", {}).get("text", "VWorld 에러")
-                        else:
+                        if response_block.get("status") != "ERROR":
                             features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
                             if features:
                                 props = features[0].get("properties", {})
                                 jiga_val = props.get("jiga", 0)
                                 out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                v_success_count += 1
-
-                # [API 2]: 국토부 토지특성속성조회 (지목, 면적 파싱용)
-                if DATA_GO_KR_KEY:
-                    land_params = {
-                        'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
-                        'pnu': pnu,
-                        'numOfRows': '1', 
-                        'pageNo': '1'
-                    }
-                    # 국토부 토지특성 API 주소 (VWorld getLandCharacteristics 와 동일 역할)
-                    land_res = requests.get("https://apis.data.go.kr/1611000/nsdi/LandCharacteristicsService/attr/getLandCharacteristics", params=land_params, timeout=5)
-                    
-                    if land_res.status_code == 200 and "<lndcgrCodeNm>" in land_res.text:
-                        root = ET.fromstring(land_res.text)
-                        
-                        jimok_node = root.find('.//lndcgrCodeNm')
-                        area_node = root.find('.//lndpclAr')
-                        
-                        if jimok_node is not None and jimok_node.text:
-                            out_data["vworld_jimok"] = jimok_node.text
-                            
-                        if area_node is not None and area_node.text:
-                            out_data["vworld_area"] = float(area_node.text)
-                            
-                        v_success_count += 1
-
-                # 둘 다 성공했거나, 하나라도 데이터를 건졌다면 성공 처리
+                                
                 if v_success_count > 0:
                     out_data["vworld_success"] = True
 
-                # [API 3]: 국토부 건축물대장 호출 (건축면적 파싱용)
+                # 3. 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
