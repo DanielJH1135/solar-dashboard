@@ -5,7 +5,6 @@ import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
-# .env 환경변수 로드
 load_dotenv()
 
 app = Flask(__name__)
@@ -27,7 +26,6 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        /* 접이식 UI 화살표 숨김 */
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
         .map-container { min-height: 500px; height: 100%; border-radius: 1rem; }
@@ -40,7 +38,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld 토지특성정보 & 건축물대장 통합 관제 시스템</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld API 정밀 추적 디버깅 버전</p>
         </div>
     </header>
 
@@ -98,12 +96,6 @@ HTML_TEMPLATE = """
                         <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
-                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
-                </a>
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
@@ -165,7 +157,7 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대형</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">리스크 제로</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대(50kW이상)
                         </h3>
@@ -193,7 +185,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 분석 중...</span>
+                        <span>데이터 수집 및 PNU 연동 중...</span>
                     </div>
                 </div>
             </div>
@@ -340,6 +332,10 @@ HTML_TEMPLATE = """
 </html>
 """
 
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
 @app.route('/api/analyze')
 def api_analyze():
     addr = request.args.get('address', '')
@@ -381,28 +377,31 @@ def api_analyze():
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                # 1. 토지특성정보 조회 API (지목, 면적 획득)
+                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").rstrip("/")
+
+                # [API 1] 토지특성정보 조회 API (지목, 면적 획득)
                 if VWORLD_API_KEY:
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {
                         "key": VWORLD_API_KEY,
-                        "domain": VWORLD_DOMAIN.replace("https://", "").replace("http://", ""),
+                        "domain": domain_clean,
                         "pnu": pnu,
                         "format": "json"
                     }
                     char_headers = {
-                        "User-Agent": "Mozilla/5.0",
-                        "Referer": f"https://{VWORLD_DOMAIN.replace('https://', '').replace('http://', '')}"
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                        "Referer": f"https://{domain_clean}"
                     }
                     
                     char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
                     
-                    print("===== [DEBUG] LAND API =====")
-                    print(f"Status Code: {char_res.status_code}")
-                    try:
-                        char_json = char_res.json()
-                        print(char_json)
-                        if char_res.status_code == 200:
+                    print("===== [DEBUG] LAND CHARACTERISTICS API =====")
+                    print(f"Status: {char_res.status_code}")
+                    print(f"Response: {char_res.text[:1000]}")
+                    
+                    if char_res.status_code == 200:
+                        try:
+                            char_json = char_res.json()
                             res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
                             if res_body:
                                 props = res_body[0].get("properties", {})
@@ -410,10 +409,12 @@ def api_analyze():
                                 area_val = props.get("lndpclAr", 0)
                                 out_data["vworld_area"] = float(area_val) if area_val else 0.0
                                 out_data["vworld_success"] = True
-                    except Exception as json_e:
-                        print(f"JSON Parsing Error (Land API): {json_e}")
+                        except Exception as je:
+                            print(f"Land Char JSON Parsing Error: {je}")
+                    else:
+                        out_data["vworld_error_msg"] = f"지목API오류({char_res.status_code})"
 
-                # 2. 브이월드 연속지적도 API (공시지가 획득)
+                # [API 2] 브이월드 연속지적도 API (공시지가 획득)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -425,29 +426,43 @@ def api_analyze():
                         "attribute": "true",
                         "attrFilter": f"pnu:=:{pnu}",
                         "key": VWORLD_API_KEY,
-                        "domain": VWORLD_DOMAIN.replace("https://", "").replace("http://", "")
+                        "domain": domain_clean
                     }
+                    
                     v_headers = {
-                        "User-Agent": "Mozilla/5.0",
-                        "Referer": f"https://{VWORLD_DOMAIN.replace('https://', '').replace('http://', '')}"
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                        "Referer": f"https://{domain_clean}"
                     }
                     
                     v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                    
+                    print("===== [DEBUG] CONTINUOUS CADASTRAL API =====")
+                    print(f"Status: {v_res.status_code}")
+                    print(f"Response: {v_res.text[:1000]}")
+                    
                     if v_res.status_code == 200:
-                        v_json = v_res.json()
-                        response_block = v_json.get("response", {})
-                        if response_block.get("status") != "ERROR":
-                            features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
-                            if features:
-                                props = features[0].get("properties", {})
-                                jiga_val = props.get("jiga", 0)
-                                out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                out_data["vworld_success"] = True
-                                
-                # 3. 국토부 건축물대장 호출 (디버깅 로그 추가)
+                        try:
+                            v_json = v_res.json()
+                            response_block = v_json.get("response", {})
+                            if response_block.get("status") != "ERROR":
+                                features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
+                                if features:
+                                    props = features[0].get("properties", {})
+                                    jiga_val = props.get("jiga", 0)
+                                    out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
+                                    out_data["vworld_success"] = True
+                            else:
+                                err_txt = response_block.get("error", {}).get("text", "지적도오류")
+                                out_data["vworld_error_msg"] = err_txt
+                        except Exception as ve:
+                            print(f"Cadastral JSON Parsing Error: {ve}")
+                    else:
+                        out_data["vworld_error_msg"] = f"지적도통신오류({v_res.status_code})"
+
+                # [API 3] 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
-                        'serviceKey': DATA_GO_KR_KEY, # unquote 제거하여 키 원본 사용
+                        'serviceKey': DATA_GO_KR_KEY, 
                         'sigunguCd': sigungu_cd, 
                         'bjdongCd': bjdong_cd, 
                         'platGbCd': molit_plat_gb,
@@ -459,12 +474,11 @@ def api_analyze():
                     bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
                     
                     print("===== [DEBUG] BUILDING API =====")
-                    print(f"Status Code: {bld_res.status_code}")
-                    print(bld_res.text[:1000]) # XML 응답 확인
+                    print(f"Status: {bld_res.status_code}")
+                    print(f"Response: {bld_res.text[:1000]}")
                     
                     if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
                         root = ET.fromstring(bld_res.text)
-                        # 대소문자 구분을 피하기 위해 소문자 태그나 전체 노드 검색 수행
                         arch_node = root.find('.//archArea') or root.find('.//archarea')
                         tot_node = root.find('.//totArea') or root.find('.//totarea')
                         
@@ -480,6 +494,6 @@ def api_analyze():
         print(f"API Error: {e}")
 
     return jsonify(out_data)
-    
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
