@@ -14,7 +14,7 @@ DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "http://localhost:5000")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "https://solar-dashboard-daegu.vercel.app/")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -39,7 +39,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 정밀 연동 픽스 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 및 맵 복원 Ver.</p>
         </div>
     </header>
 
@@ -48,7 +48,7 @@ HTML_TEMPLATE = """
             <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-500"></i>
             <input type="text" id="addressInput" value="대구광역시 수성구 범어동 1" 
                    class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base"
-                   placeholder="검색할 지번 또는 상호명을 입력하세요">
+                   placeholder="상호명, 도로명, 지번 주소를 자유롭게 입력하세요">
         </div>
         <button onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-magnifying-glass-chart"></i> 부지 분석 조회
@@ -137,7 +137,7 @@ HTML_TEMPLATE = """
                         </h3>
                         
                         <div class="mb-4 bg-gray-950 p-2.5 rounded-lg border border-amber-900/30">
-                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 커스텀 (원)</label>
+                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 조정 (원)</label>
                             <input type="number" id="kwCostInput" value="800000" step="10000" oninput="calculateValues()" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -147,20 +147,20 @@ HTML_TEMPLATE = """
                                 <span class="font-bold text-white"><span id="ownerInvest">0</span> 만원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월평균 순수익(참고용)</span>
+                                <span class="text-gray-500">월평균 순수익</span>
                                 <span class="font-bold text-emerald-400"><span id="ownerMonthlyProfit">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">단순 회수 기간(예상)</span>
+                                <span class="text-gray-500">단순 회수 기간</span>
                                 <span id="paybackLabel" class="font-bold text-emerald-300">연산중</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">지붕임대</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">리스크 제로</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 임대형
+                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대(50kW이상)
                         </h3>
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
@@ -168,11 +168,11 @@ HTML_TEMPLATE = """
                                 <span class="font-bold text-blue-400">0원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월 수령 임대료</span>
+                                <span class="text-gray-500">월 수령 임대료(단순/12)</span>
                                 <span class="font-bold text-white"><span id="rentMonthly">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">연 수령 임대료</span>
+                                <span class="text-gray-500">연 수령 임대료(예상)</span>
                                 <span class="font-bold text-white"><span id="rentAnnual">0</span> 원</span>
                             </div>
                         </div>
@@ -186,7 +186,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 PNU 연동 중...</span>
+                        <span>데이터 수집 및 분석 중...</span>
                     </div>
                 </div>
             </div>
@@ -238,6 +238,7 @@ HTML_TEMPLATE = """
                     const coords = new kakao.maps.LatLng(place.y, place.x);
                     marker.setPosition(coords);
                     map.setCenter(coords);
+                    // 상호명 검색 시에도 해당 장소의 정확한 주소를 백엔드로 토스
                     fetchBackendData(place.address_name || place.road_address_name);
                 } else {
                     geocoder.addressSearch(addr, function(result, status) {
@@ -350,12 +351,15 @@ def api_analyze():
         return jsonify(out_data)
 
     try:
+        # 카카오 로컬 API로 주소의 지번 요소 완벽 추출
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
         k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
         documents = k_res.json().get('documents', [])
         
         if documents:
-            jibun_info = documents[0].get('address')
+            addr_data = documents[0]
+            # 도로명이나 키워드로 검색했어도 카카오는 'address'(순수 지번) 객체를 던져줍니다.
+            jibun_info = addr_data.get('address') 
             
             if jibun_info:
                 b_code = jibun_info.get('b_code', '0000000000')
@@ -370,15 +374,16 @@ def api_analyze():
                 
                 full_jibun_name = jibun_info.get('address_name', '')
                 
-                # 규격 분기 1: VWorld용 PNU (1:일반, 2:산)
+                # 규격 분기 1: VWorld PNU 용
                 pnu_land_type = '2' if "산" in full_jibun_name else '1'
                 
-                # 규격 분기 2: 국토부 대지구분코드 (0:대지, 1:산)
+                # 규격 분기 2: 국토부 대지구분코드 용
                 molit_plat_gb = '1' if "산" in full_jibun_name else '0'
                 
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
+                # 브이월드 호출
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -391,7 +396,11 @@ def api_analyze():
                         "geometry": "false", 
                         "crs": "EPSG:4326"
                     }
-                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, timeout=5)
+                    
+                    referer_url = VWORLD_DOMAIN if VWORLD_DOMAIN.startswith("http") else f"https://{VWORLD_DOMAIN}"
+                    v_headers = {"Referer": referer_url}
+                    
+                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
                     
                     if v_res.status_code == 200:
                         v_json = v_res.json()
@@ -400,15 +409,18 @@ def api_analyze():
                             props = features[0].get("properties", {})
                             out_data["vworld_success"] = True
                             out_data["vworld_jimok"] = props.get("jimok", "-")
-                            out_data["vworld_area"] = float(props.get("parea", 0.0))
-                            out_data["vworld_jiga"] = int(props.get("jiga", 0))
+                            parea_val = props.get("parea", 0)
+                            out_data["vworld_area"] = float(parea_val) if parea_val else 0.0
+                            jiga_val = props.get("jiga", 0)
+                            out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
 
+                # 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
                         'sigunguCd': sigungu_cd, 
                         'bjdongCd': bjdong_cd, 
-                        'platGbCd': molit_plat_gb,  # 국토부 전용 대지구분 필수 파라미터 적용
+                        'platGbCd': molit_plat_gb,
                         'bun': bun, 
                         'ji': ji,
                         'numOfRows': '1', 
