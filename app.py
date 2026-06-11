@@ -38,7 +38,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld API 정밀 추적 디버깅 버전</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">면적 데이터 예외처리 방어 및 API 통합 마스터 버전</p>
         </div>
     </header>
 
@@ -72,7 +72,7 @@ HTML_TEMPLATE = """
                         <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
                     </div>
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
+                        <span class="text-[11px] text-gray-500 block mb-1">토지 대장 면적</span>
                         <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
@@ -96,6 +96,12 @@ HTML_TEMPLATE = """
                         <span id="bdTotArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
+                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
+                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
+                </a>
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
@@ -185,7 +191,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 PNU 연동 중...</span>
+                        <span>데이터 수집 및 분석 중...</span>
                     </div>
                 </div>
             </div>
@@ -214,12 +220,13 @@ HTML_TEMPLATE = """
         });
 
         function switchMode(mode) {
+            let areaInput = document.getElementById('customArea');
             if (mode === 'land') {
                 let netYardArea = rawLandArea - rawArchArea;
-                document.getElementById('customArea').value = netYardArea > 0 ? netYardArea.toFixed(2) : rawLandArea.toFixed(2);
+                areaInput.value = netYardArea > 0 ? netYardArea.toFixed(2) : (rawLandArea > 0 ? rawLandArea.toFixed(2) : "0.00");
                 document.getElementById('inputLabel').innerText = "마당 가용 면적 (㎡)";
             } else {
-                document.getElementById('customArea').value = rawArchArea.toFixed(2);
+                areaInput.value = rawArchArea > 0 ? rawArchArea.toFixed(2) : "0.00";
                 document.getElementById('inputLabel').innerText = "지붕 가용 면적 (㎡)";
             }
             calculateValues();
@@ -259,14 +266,16 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
+                    // 면적 데이터 방어 코드 적용 바인딩
                     if(data.vworld_success) {
-                        rawLandArea = data.vworld_area;
+                        // 토지면적(지적)을 안전하게 수신
+                        rawLandArea = data.vworld_area ? parseFloat(data.vworld_area) : 0.0;
                         document.getElementById('vwPnu').innerText = data.pnu;
                         document.getElementById('vwJimok').innerText = data.vworld_jimok;
                         document.getElementById('vwArea').innerText = rawLandArea.toLocaleString();
                         document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
                     } else {
-                        rawLandArea = 0;
+                        rawLandArea = 0.0;
                         document.getElementById('vwPnu').innerText = data.vworld_error_msg ? `에러: ${data.vworld_error_msg}` : `${data.pnu} (DB 없음)`;
                         document.getElementById('vwJimok').innerText = "-";
                         document.getElementById('vwArea').innerText = "0";
@@ -274,11 +283,12 @@ HTML_TEMPLATE = """
                     }
 
                     if(data.building_success) {
-                        rawArchArea = data.arch_area;
+                        // 건축면적을 안전하게 수신
+                        rawArchArea = data.arch_area ? parseFloat(data.arch_area) : 0.0;
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
                         document.getElementById('bdTotArea').innerText = data.tot_area.toLocaleString();
                     } else {
-                        rawArchArea = 0;
+                        rawArchArea = 0.0;
                         document.getElementById('bdArchArea').innerText = "0";
                         document.getElementById('bdTotArea').innerText = "0";
                     }
@@ -292,7 +302,7 @@ HTML_TEMPLATE = """
 
         function calculateValues() {
             let currentArea = parseFloat(document.getElementById('customArea').value);
-            if(isNaN(currentArea) || currentArea < 0) currentArea = 0;
+            if(isNaN(currentArea) || currentArea < 0) currentArea = 0.0;
             
             const pyeong = currentArea / 3.3;
             const kw = pyeong / 3.0;
@@ -364,6 +374,7 @@ def api_analyze():
                 bjdong_cd = b_code[5:]
                 
                 main_no = jibun_info.get('main_address_no', '')
+                main_no = jibun_info.get('main_address_no', '')
                 sub_no = jibun_info.get('sub_address_no', '')
                 
                 bun = main_no.zfill(4) if main_no else '0000'
@@ -378,6 +389,8 @@ def api_analyze():
                 out_data["pnu"] = pnu
 
                 domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").rstrip("/")
+
+                v_success_count = 0
 
                 # [API 1] 토지특성정보 조회 API (지목, 면적 획득)
                 if VWORLD_API_KEY:
@@ -395,10 +408,6 @@ def api_analyze():
                     
                     char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
                     
-                    print("===== [DEBUG] LAND CHARACTERISTICS API =====")
-                    print(f"Status: {char_res.status_code}")
-                    print(f"Response: {char_res.text[:1000]}")
-                    
                     if char_res.status_code == 200:
                         try:
                             char_json = char_res.json()
@@ -406,13 +415,13 @@ def api_analyze():
                             if res_body:
                                 props = res_body[0].get("properties", {})
                                 out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
-                                area_val = props.get("lndpclAr", 0)
+                                
+                                # 면적 데이터 추출 안전 장치
+                                area_val = props.get("lndpclAr")
                                 out_data["vworld_area"] = float(area_val) if area_val else 0.0
-                                out_data["vworld_success"] = True
+                                v_success_count += 1
                         except Exception as je:
                             print(f"Land Char JSON Parsing Error: {je}")
-                    else:
-                        out_data["vworld_error_msg"] = f"지목API오류({char_res.status_code})"
 
                 # [API 2] 브이월드 연속지적도 API (공시지가 획득)
                 if VWORLD_API_KEY:
@@ -436,10 +445,6 @@ def api_analyze():
                     
                     v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
                     
-                    print("===== [DEBUG] CONTINUOUS CADASTRAL API =====")
-                    print(f"Status: {v_res.status_code}")
-                    print(f"Response: {v_res.text[:1000]}")
-                    
                     if v_res.status_code == 200:
                         try:
                             v_json = v_res.json()
@@ -450,14 +455,12 @@ def api_analyze():
                                     props = features[0].get("properties", {})
                                     jiga_val = props.get("jiga", 0)
                                     out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                    out_data["vworld_success"] = True
-                            else:
-                                err_txt = response_block.get("error", {}).get("text", "지적도오류")
-                                out_data["vworld_error_msg"] = err_txt
+                                    v_success_count += 1
                         except Exception as ve:
                             print(f"Cadastral JSON Parsing Error: {ve}")
-                    else:
-                        out_data["vworld_error_msg"] = f"지적도통신오류({v_res.status_code})"
+
+                if v_success_count > 0:
+                    out_data["vworld_success"] = True
 
                 # [API 3] 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
@@ -472,10 +475,6 @@ def api_analyze():
                         'pageNo': '1'
                     }
                     bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
-                    
-                    print("===== [DEBUG] BUILDING API =====")
-                    print(f"Status: {bld_res.status_code}")
-                    print(f"Response: {bld_res.text[:1000]}")
                     
                     if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
                         root = ET.fromstring(bld_res.text)
