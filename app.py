@@ -21,8 +21,8 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        .map-container { min-height: 350px; height: 45vh; }
-        @media (min-width: 1024px) { .map-container { height: 100%; min-height: 620px; } }
+        .map-container { min-height: 350px; height: 40vh; }
+        @media (min-width: 1024px) { .map-container { height: 100%; min-height: 650px; } }
     </style>
 </head>
 <body class="p-4 md:p-6 max-w-7xl mx-auto">
@@ -30,9 +30,9 @@ HTML_TEMPLATE = """
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-gray-800 pb-5">
         <div>
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-chart-pie text-emerald-400"></i> 대구지사 태양광 수익방식 비교 관제시스템
+                <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 분석 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">대장 미등록/나대지 수동 입력 완전 보정 에디션</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">공사 단가 및 발전량 지표 포함</p>
         </div>
     </header>
 
@@ -54,7 +54,7 @@ HTML_TEMPLATE = """
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 shadow-xl">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-gray-400 text-xs font-semibold tracking-wider uppercase flex items-center gap-2">
-                        <i class="fa-solid fa-calculator text-emerald-400"></i> 1단계: 부지 기본 정보
+                        <i class="fa-solid fa-sliders text-emerald-400"></i> 1단계: 가용 면적 및 변수 설정
                     </h2>
                     <span id="apiStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">대기중</span>
                 </div>
@@ -73,17 +73,27 @@ HTML_TEMPLATE = """
                 <div class="flex gap-2.5 mb-4">
                     <label class="flex-1 bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center gap-2 cursor-pointer hover:border-gray-700">
                         <input type="radio" name="calcMode" value="plat" checked onchange="switchMode('plat')" class="accent-blue-500">
-                        <span class="text-xs text-gray-300 font-medium">나대지/마당 기준</span>
+                        <span class="text-xs text-gray-300 font-medium">🌳 마당 기준</span>
                     </label>
                     <label class="flex-1 bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center gap-2 cursor-pointer hover:border-gray-700">
                         <input type="radio" name="calcMode" value="arch" onchange="switchMode('arch')" class="accent-emerald-400">
-                        <span class="text-xs text-gray-300 font-medium">지붕/옥상 기준</span>
+                        <span class="text-xs text-gray-300 font-medium">🏢 옥상 기준</span>
                     </label>
                 </div>
 
                 <div class="mb-4">
-                    <label class="text-xs text-gray-500 block mb-1.5" id="inputLabel">가용 면적 수정 (㎡) <span class="text-amber-400 text-[11px] font-normal">(조회 실패시 수동 입력 가능)</span></label>
-                    <input type="number" id="customArea" oninput="calculateValues()" class="w-full bg-gray-950 border-2 border-gray-800 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none text-sm">
+                    <label class="text-xs text-gray-500 block mb-1.5" id="inputLabel">가용 실측 면적 수정 (㎡)</label>
+                    <input type="number" id="customArea" oninput="calculateValues()" class="w-full bg-gray-950 border-2 border-gray-800 focus:border-emerald-500 rounded-xl px-4 py-2 text-white font-bold focus:outline-none text-sm">
+                </div>
+
+                <div class="mb-4">
+                    <label class="text-xs text-amber-400 font-semibold block mb-1.5">
+                        <i class="fa-solid fa-money-bill-wave mr-1"></i> kW당 원가 단가 커스텀 설정 (원)
+                    </label>
+                    <input type="number" id="kwCostInput" value="800000" min="800000" step="10000" oninput="calculateValues()" 
+                           class="w-full bg-gray-950 border-2 border-amber-900/40 focus:border-amber-500 rounded-xl px-4 py-2 text-amber-400 font-black focus:outline-none text-sm shadow-inner"
+                           placeholder="최소 800,000원 이상 입력">
+                    <span class="text-[10px] text-gray-500 block mt-1">* 베이스 80만원 미만 하향 조정은 불가합니다.</span>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3 bg-gray-950 p-3 rounded-xl border border-gray-850 text-center">
@@ -104,63 +114,80 @@ HTML_TEMPLATE = """
                         <i class="fa-solid fa-building-shield text-base"></i>
                     </div>
                     <div>
-                        <h3 class="text-xs font-bold text-white">리스 금융 방식 (소유권 이전형/철거형)</h3>
-                        <p class="text-[11px] text-gray-400 mt-0.5">초기 한도 심사 및 SPC 조달 조건 조율 필요</p>
+                        <h3 class="text-xs font-bold text-white">⚙️ 리스 금융 방식 (소유권 이전형/철거형)</h3>
+                        <p class="text-[11px] text-gray-400 mt-0.5">본사 자본 금융 심사 승인 필요</p>
                     </div>
                 </div>
                 <div class="mt-3 bg-gray-950/60 border border-gray-850 px-3 py-2 rounded-lg text-center text-amber-500 text-xs font-bold">
-                    리스 별도 문의 필수
+                    ⚠️ 리스 별도 문의
                 </div>
             </div>
 
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-3 rounded-xl font-medium transition-all">
-                    <i class="fa-solid fa-arrow-up-right-from-square mr-1 text-blue-400"></i> 한전ON 선로 용량 수동 검증 사이트 열기
+                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
+                    🌐 한전ON 공식 실시간 선로 용량 수동 확인하기
                 </a>
             </div>
 
         </div>
 
         <div class="lg:col-span-7 flex flex-col gap-6">
+            
+            <div class="bg-gradient-to-r from-gray-900 to-emerald-950/20 border border-emerald-900/40 rounded-2xl p-4 shadow-xl">
+                <h2 class="text-emerald-400 text-xs font-bold tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-emerald-400 animate-pulse"></i> 태양광 리얼 예상 발전량 연산 지표 (대구 일사량 기준)
+                </h2>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-850 text-center">
+                        <span class="text-[10px] text-gray-500 block mb-0.5">📊 월평균 예상 발전량</span>
+                        <span id="genMonthly" class="text-base font-black text-white">0</span> <span class="text-xs text-gray-400">kWh / 월</span>
+                    </div>
+                    <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-850 text-center">
+                        <span class="text-[10px] text-gray-500 block mb-0.5">☀️ 연간 총 예상 발전량</span>
+                        <span id="genAnnual" class="text-base font-black text-emerald-400">0</span> <span class="text-xs text-emerald-400">kWh / 년</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 
-                <div class="bg-gray-900 border-2 border-emerald-500/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden bg-gradient-to-b from-emerald-950/10 to-transparent">
-                    <div class="absolute top-0 right-0 bg-emerald-500 text-gray-950 font-black text-[10px] px-2.5 py-1 rounded-bl-xl uppercase tracking-wider">인기 제안</div>
+                <div class="bg-gray-900 border-2 border-emerald-500/40 rounded-2xl p-5 shadow-2xl relative bg-gradient-to-b from-emerald-950/10 to-transparent">
+                    <div class="absolute top-0 right-0 bg-emerald-500 text-gray-950 font-black text-[10px] px-2.5 py-1 rounded-bl-xl uppercase tracking-wider">자가 투자</div>
                     <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                         <i class="fa-solid fa-coins text-emerald-400"></i> [1안] 자가발전 투자형
                     </h3>
                     <div class="flex flex-col gap-2.5">
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">예상 총공사비 (스타타워 단가 기준)</span>
+                            <span class="text-gray-500 text-[10px] block">🛠️ 실시간 산출 총공사비</span>
                             <span id="ownerInvest" class="text-sm font-bold text-white">0</span> <span class="text-xs text-gray-400">만 원</span>
                         </div>
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">월평균 예상 순수익</span>
+                            <span class="text-gray-500 text-[10px] block">💰 월평균 예쌍 매출 순수익</span>
                             <span id="ownerMonthlyProfit" class="text-base font-black text-emerald-400">0</span> <span class="text-xs text-emerald-400">원 / 월</span>
                         </div>
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850 flex justify-between items-center">
-                            <span class="text-gray-500 text-[10px]">원금 회수 소요기간</span>
-                            <span class="text-xs font-bold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900/50">약 2년 7개월</span>
+                            <span class="text-gray-500 text-[10px]">⏳ 예상 투자금 회수 기간</span>
+                            <span id="paybackLabel" class="text-xs font-bold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900/50">연산중</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-gray-900 border-2 border-blue-500/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden bg-gradient-to-b from-blue-950/10 to-transparent">
+                <div class="bg-gray-900 border-2 border-blue-500/40 rounded-2xl p-5 shadow-2xl relative bg-gradient-to-b from-blue-950/10 to-transparent">
                     <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl uppercase tracking-wider">리스크 제로</div>
                     <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                         <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 부지 임대 대여형
                     </h3>
                     <div class="flex flex-col gap-2.5">
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">소유주 초기 투자 비용</span>
-                            <span class="text-sm font-bold text-blue-400">0원 (전액 본사 자부담)</span>
+                            <span class="text-gray-500 text-[10px] block">📉 소유주 초기 투자 비용</span>
+                            <span class="text-sm font-bold text-blue-400">0원 (전액 지사 부담)</span>
                         </div>
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">소유주 수령 임대료 (월)</span>
+                            <span class="text-gray-500 text-[10px] block">🏢 소유주 수령 임대료 (월)</span>
                             <span id="rentMonthly" class="text-base font-black text-blue-400">0</span> <span class="text-xs text-blue-400">원 / 월</span>
                         </div>
                         <div class="bg-gray-950 p-2.5 rounded-lg border border-gray-850">
-                            <span class="text-gray-500 text-[10px] block">소유주 수령 임대료 (연간 고정)</span>
+                            <span class="text-gray-500 text-[10px] block">🗓️ 소유주 수령 임대료 (연간 고정)</span>
                             <span id="rentAnnual" class="text-sm font-bold text-white">0</span> <span class="text-xs text-gray-400">원 / 년</span>
                         </div>
                     </div>
@@ -183,10 +210,13 @@ HTML_TEMPLATE = """
 
         document.addEventListener("DOMContentLoaded", function() {
             const mapContainer = document.getElementById('map');
-            map = new kakao.maps.Map(mapContainer, { center: new kakao.maps.LatLng(35.8596, 128.6254), level: 2 });
+            const defaultPos = new kakao.maps.LatLng(35.8596, 128.6254); 
+            
+            map = new kakao.maps.Map(mapContainer, { center: defaultPos, level: 2 });
             map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
             geocoder = new kakao.maps.services.Geocoder();
-            marker = new kakao.maps.Marker({ map: map });
+            marker = new kakao.maps.Marker({ map: map, position: defaultPos });
+            
             startAnalysis();
         });
 
@@ -206,7 +236,7 @@ HTML_TEMPLATE = """
             const addr = document.getElementById('addressInput').value;
             if(!addr) return;
             
-            document.getElementById('apiStatusBadge').innerText = "대장 조회중...";
+            document.getElementById('apiStatusBadge').innerText = "조회중...";
             document.getElementById('apiStatusBadge').className = "text-[10px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-400 border border-amber-800";
 
             geocoder.addressSearch(addr, function(result, status) {
@@ -214,6 +244,7 @@ HTML_TEMPLATE = """
                     const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
                     marker.setPosition(coords);
                     map.setCenter(coords);
+                    map.relayout();
                 }
             });
 
@@ -234,7 +265,7 @@ HTML_TEMPLATE = """
                         document.getElementById('platArea').innerText = "대장 없음";
                         document.getElementById('archArea').innerText = "나대지 지역";
                         
-                        document.getElementById('apiStatusBadge').innerText = "수동 입력 대기";
+                        document.getElementById('apiStatusBadge').innerText = "수동 모드 가동";
                         document.getElementById('apiStatusBadge').className = "text-[10px] px-2 py-0.5 rounded font-bold bg-red-950 text-red-400 border border-red-800";
                     }
                     
@@ -248,7 +279,7 @@ HTML_TEMPLATE = """
                     calculateValues();
                 }).catch(err => {
                     console.error(err);
-                    document.getElementById('apiStatusBadge').innerText = "통신 에러 / 수동 모드";
+                    document.getElementById('apiStatusBadge').innerText = "수동 가동";
                 });
         }
 
@@ -259,19 +290,50 @@ HTML_TEMPLATE = """
             const pyeong = currentArea / 3.3;
             const kw = pyeong / 3.8;
             
+            // 🛠️ 공사 단가 제어 소스 결속 (하한선 80만 원 고정 처리)
+            let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
+            if (isNaN(kwCostInput) || kwCostInput < 800000) {
+                kwCostInput = 800000;
+            }
+            
             const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
             let unitPrice = (currentMode === 'plat') ? (130 + 70 * 1.2) : (130 + 70 * 1.5);
             
+            // 발전량 원본 데이터 산출 (전광판 표출용)
             const annualGeneration = kw * 3.6 * 365;
+            const monthlyGeneration = annualGeneration / 12;
+            
+            document.getElementById('genAnnual').innerText = Math.round(annualGeneration).toLocaleString();
+            document.getElementById('genMonthly').innerText = Math.round(monthlyGeneration).toLocaleString();
+            
+            // 1️⃣ 자가발전형 투자 지표 연산
             const annualRevenue = annualGeneration * unitPrice;
             const monthlyProfit = annualRevenue / 12;
-            const estimatedCost = kw * 88; 
-
+            
+            // 대표님이 상향 조정한 원가 단가를 기준으로 실시간 공사비 재계산 (만원 단위 절사)
+            const estimatedCostMan = (kw * kwCostInput) / 10000; 
+            
+            // 원금 회수 기간 계산 (총공사비 / 연수익)
+            let paybackYears = 0;
+            if (annualRevenue > 0) {
+                paybackYears = (estimatedCostMan * 10000) / annualRevenue;
+            }
+            
             document.getElementById('resPyeong').innerText = pyeong.toFixed(2) + " 평";
             document.getElementById('resKw').innerText = kw.toFixed(2) + " kW";
-            document.getElementById('ownerInvest').innerText = Math.round(estimatedCost).toLocaleString();
+            document.getElementById('ownerInvest').innerText = Math.round(estimatedCostMan).toLocaleString();
             document.getElementById('ownerMonthlyProfit').innerText = Math.round(monthlyProfit).toLocaleString();
+            
+            if (paybackYears > 0) {
+                let months = Math.round(paybackYears * 12);
+                let displayY = Math.floor(months / 12);
+                let displayM = months % 12;
+                document.getElementById('paybackLabel').innerText = `약 ${displayY}년 ${displayM}개월`;
+            } else {
+                document.getElementById('paybackLabel').innerText = "연산 불가";
+            }
 
+            // 2️⃣ 부지 임대차 수익 연산
             let rentUnitPrice = (currentMode === 'plat') ? 30000 : 35000;
             const rentAnnualProfit = kw * rentUnitPrice;
             const rentMonthlyProfit = rentAnnualProfit / 12;
@@ -327,7 +389,7 @@ def api_analyze():
                 response_data["official_exists"] = True
                 response_data["plat_area"] = 1204.85
                 response_data["arch_area"] = 850.40
-    except Exception as e:
+    except:
         pass
         
     return jsonify(response_data)
