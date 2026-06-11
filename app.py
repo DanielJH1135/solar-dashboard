@@ -14,7 +14,7 @@ DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "https://solar-dashboard-daegu.vercel.app/")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -214,7 +214,6 @@ HTML_TEMPLATE = """
             startAnalysis();
         });
 
-        // 면적 방어 로직 결합
         function switchMode(mode) {
             let areaInput = document.getElementById('customArea');
             if (mode === 'land') {
@@ -263,7 +262,6 @@ HTML_TEMPLATE = """
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
                     if(data.vworld_success) {
-                        // 안전한 Float 파싱
                         rawLandArea = data.vworld_area ? parseFloat(data.vworld_area) : 0.0;
                         document.getElementById('vwPnu').innerText = data.pnu;
                         document.getElementById('vwJimok').innerText = data.vworld_jimok;
@@ -271,7 +269,7 @@ HTML_TEMPLATE = """
                         document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
                     } else {
                         rawLandArea = 0.0;
-                        document.getElementById('vwPnu').innerText = data.pnu !== "-" ? data.pnu + " (정보없음)" : "조회 실패";
+                        document.getElementById('vwPnu').innerText = data.vworld_error_msg ? `에러: ${data.vworld_error_msg}` : `${data.pnu} (지적데이터 없음)`;
                         document.getElementById('vwJimok').innerText = "-";
                         document.getElementById('vwArea').innerText = "0";
                         document.getElementById('vwJiga').innerText = "0";
@@ -346,6 +344,7 @@ def api_analyze():
     
     out_data = {
         "vworld_success": False, "pnu": "-", "vworld_jimok": "-", "vworld_area": 0.0, "vworld_jiga": 0,
+        "vworld_error_msg": "", 
         "building_success": False, "arch_area": 0.0, "tot_area": 0.0
     }
     
@@ -380,11 +379,11 @@ def api_analyze():
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").rstrip("/")
+                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
 
                 v_success_count = 0
 
-                # 1. 토지특성정보 조회 API (지목, 면적)
+                # 🚨 [핵심 수정] 1. 토지특성정보 조회 API (진짜 VWorld 규격에 맞춰 파싱 패스 수정)
                 if VWORLD_API_KEY:
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {
@@ -394,7 +393,7 @@ def api_analyze():
                         "format": "json"
                     }
                     char_headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Referer": f"https://{domain_clean}"
                     }
                     
@@ -402,17 +401,19 @@ def api_analyze():
                         char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
                         if char_res.status_code == 200:
                             char_json = char_res.json()
-                            res_body = char_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
-                            if res_body:
-                                props = res_body[0].get("properties", {})
+                            
+                            # 📌 친구분이 짚어준 대박 억까 패스 구조체로 전면 수정!!
+                            char_list = char_json.get("landCharacteristicss", {}).get("field", [])
+                            if char_list:
+                                props = char_list[0]
                                 out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
                                 area_val = props.get("lndpclAr")
                                 out_data["vworld_area"] = float(area_val) if area_val else 0.0
                                 v_success_count += 1
                     except Exception as e:
-                        print(f"Land API Error: {e}")
+                        print(f"Land API Parsing Error: {e}")
 
-                # 2. 브이월드 연속지적도 API (공시지가)
+                # 2. 브이월드 연속지적도 API (공시지가) - HTTPS 및 헤더 보강
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -427,7 +428,7 @@ def api_analyze():
                         "domain": domain_clean
                     }
                     v_headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Referer": f"https://{domain_clean}"
                     }
                     
