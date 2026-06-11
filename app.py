@@ -5,11 +5,11 @@ import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
+# .env 환경변수 로드
 load_dotenv()
 
 app = Flask(__name__)
 
-# .env 환경변수 로드
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
@@ -27,10 +27,10 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        /* details 열렸을 때 기본 화살표 숨김 */
+        /* 접이식 UI 화살표 숨김 */
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
-        .map-container { min-height: 400px; height: 100%; border-radius: 1rem; }
+        .map-container { min-height: 500px; height: 100%; border-radius: 1rem; }
     </style>
 </head>
 <body class="p-4 md:p-6 max-w-7xl mx-auto">
@@ -40,7 +40,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld PNU 텍스트 1단계 연동 & 간편 견적 모듈</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld PNU 정밀 연동 및 맵 복원 마스터 버전</p>
         </div>
     </header>
 
@@ -48,7 +48,8 @@ HTML_TEMPLATE = """
         <div class="relative flex-grow">
             <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-500"></i>
             <input type="text" id="addressInput" value="대구광역시 수성구 범어동 1" 
-                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base">
+                   class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base"
+                   placeholder="검색할 지번 또는 상호명을 입력하세요">
         </div>
         <button onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-magnifying-glass-chart"></i> 부지 분석 조회
@@ -100,11 +101,11 @@ HTML_TEMPLATE = """
             </div>
 
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
-                <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800">
+                <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
                     </div>
-                    <i class="fa-solid fa-chevron-down transition-transform group-open:rotate-180 text-gray-500"></i>
+                    <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
@@ -136,8 +137,8 @@ HTML_TEMPLATE = """
                             <i class="fa-solid fa-coins text-emerald-400"></i> [1안] RPS 투자형
                         </h3>
                         
-                        <div class="mb-3 bg-gray-950 p-2.5 rounded-lg border border-amber-900/30">
-                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 제어 (원)</label>
+                        <div class="mb-4 bg-gray-950 p-2.5 rounded-lg border border-amber-900/30">
+                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 커스텀 (원)</label>
                             <input type="number" id="kwCostInput" value="800000" step="10000" oninput="calculateValues()" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -158,21 +159,21 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">리스크 제로</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">지붕 임대</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 부지 임대 대여형
+                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 임대형
                         </h3>
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
                                 <span class="text-gray-500">초기 투자비용</span>
-                                <span class="font-bold text-blue-400">0원 (전액 자부담)</span>
+                                <span class="font-bold text-blue-400">0원 </span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월 수령 임대료</span>
+                                <span class="text-gray-500">월 수령 임대료(참고용)(</span>
                                 <span class="font-bold text-white"><span id="rentMonthly">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">연 수령 임대료</span>
+                                <span class="text-gray-500">연 수령 임대료(예상)</span>
                                 <span class="font-bold text-white"><span id="rentAnnual">0</span> 원</span>
                             </div>
                         </div>
@@ -181,12 +182,12 @@ HTML_TEMPLATE = """
             </details>
         </div>
 
-        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex flex-col min-h-[400px]">
+        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex flex-col min-h-[500px]">
             <div id="map" class="w-full map-container relative">
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 통신 중...</span>
+                        <span>데이터 수집 및 PNU 연동 중...</span>
                     </div>
                 </div>
             </div>
@@ -226,7 +227,6 @@ HTML_TEMPLATE = """
             calculateValues();
         }
 
-        // 상호명 검색 및 마커 이동 로직 정상 복구
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
             if(!addr) return;
@@ -270,7 +270,7 @@ HTML_TEMPLATE = """
                         document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
                     } else {
                         rawLandArea = 0;
-                        document.getElementById('vwPnu').innerText = "조회 실패";
+                        document.getElementById('vwPnu').innerText = data.pnu !== "-" ? data.pnu + " (정보없음)" : "조회 실패";
                         document.getElementById('vwJimok').innerText = "-";
                         document.getElementById('vwArea').innerText = "0";
                         document.getElementById('vwJiga').innerText = "0";
@@ -353,30 +353,35 @@ def api_analyze():
         return jsonify(out_data)
 
     try:
-        # 카카오 로컬 API로 주소 쪼개기
+        # 1. 카카오 로컬 API 통신
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
         k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
         documents = k_res.json().get('documents', [])
         
         if documents:
-            addr_info = documents[0].get('address') or documents[0].get('road_address')
-            if addr_info:
-                b_code = addr_info.get('b_code', '0000000000')
+            # PNU 조립의 핵심 픽스: '도로명 주소'가 아닌 '순수 지번 주소(address)' 타겟팅
+            jibun_info = documents[0].get('address')
+            
+            if jibun_info:
+                b_code = jibun_info.get('b_code', '0000000000')
                 sigungu_cd = b_code[:5]
                 bjdong_cd = b_code[5:]
                 
-                main_no = addr_info.get('main_address_no', '')
-                sub_no = addr_info.get('sub_address_no', '')
+                main_no = jibun_info.get('main_address_no', '')
+                sub_no = jibun_info.get('sub_address_no', '')
                 
-                bun = main_no.zfill(4)
+                bun = main_no.zfill(4) if main_no else '0000'
                 ji = sub_no.zfill(4) if sub_no else '0000'
-                land_type = '2' if "산" in addr else '1'
                 
-                # 19자리 PNU 생성
+                # '산' 번지 판별 (지번 주소명 기준)
+                full_jibun_name = jibun_info.get('address_name', '')
+                land_type = '2' if "산" in full_jibun_name else '1'
+                
+                # 19자리 PNU 완벽 생성
                 pnu = f"{sigungu_cd}{bjdong_cd}{land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                # 친구분 조언대로 geometry=false 적용하여 텍스트만 1차 수집
+                # 2. VWorld API 호출 (1단계 텍스트 추출용 geometry=false)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
@@ -386,10 +391,11 @@ def api_analyze():
                         "key": VWORLD_API_KEY,
                         "domain": VWORLD_DOMAIN,
                         "attrFilter": f"pnu:=:{pnu}",
-                        "geometry": "false",  # 1단계 목표: 텍스트 정보만 깔끔하게 호출
+                        "geometry": "false", 
                         "crs": "EPSG:4326"
                     }
                     v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, timeout=5)
+                    
                     if v_res.status_code == 200:
                         v_json = v_res.json()
                         features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
@@ -400,7 +406,7 @@ def api_analyze():
                             out_data["vworld_area"] = float(props.get("parea", 0.0))
                             out_data["vworld_jiga"] = int(props.get("jiga", 0))
 
-                # 건축물대장 호출
+                # 3. 국토부 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
