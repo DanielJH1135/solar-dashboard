@@ -13,8 +13,6 @@ app = Flask(__name__)
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
-VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -39,7 +37,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 및 맵 복원 Ver.</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">국토부 건축물대장 정보 집중 정밀 연동 Ver.</p>
         </div>
     </header>
 
@@ -60,33 +58,13 @@ HTML_TEMPLATE = """
         <div class="lg:col-span-5 flex flex-col gap-4">
             
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
-                <h3 class="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-map-location-dot"></i> VWorld 토지 지적 정보
-                </h3>
-                <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
-                    <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호</span>
-                    <span id="vwPnu" class="text-sm font-mono text-gray-300">-</span>
-                </div>
-                <div class="grid grid-cols-2 gap-3 text-center mb-3">
-                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">법정 지목</span>
-                        <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
-                    </div>
-                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
-                        <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
-                    </div>
-                </div>
-                <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex justify-between items-center">
-                    <span class="text-[11px] text-gray-500 block">개별 공시지가 (㎡당)</span>
-                    <div><span id="vwJiga" class="text-sm font-bold text-white">0</span> <span class="text-[11px] text-gray-400">원</span></div>
-                </div>
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-building"></i> 국토부 건축물대장 정보
                 </h3>
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
+                    <span class="text-[11px] text-gray-500 block mb-1">조회 타겟 매칭 지번</span>
+                    <span id="targetJibun" class="text-sm font-mono text-gray-300">-</span>
+                </div>
                 <div class="grid grid-cols-2 gap-3 text-center">
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
                         <span class="text-[11px] text-gray-500 block mb-1">건축 면적</span>
@@ -99,6 +77,12 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-md text-center">
+                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
+                    🌐 한전ON 공식 실시간 여유 선로 용량 조회하기
+                </a>
+            </div>
+
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
@@ -108,19 +92,8 @@ HTML_TEMPLATE = """
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
-                    <div class="flex gap-2">
-                        <label class="flex-1 bg-gray-950 border border-gray-800 p-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:border-gray-700">
-                            <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500">
-                            <span class="text-xs text-gray-300">토지 기준 (나대지)</span>
-                        </label>
-                        <label class="flex-1 bg-gray-950 border border-gray-800 p-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:border-gray-700">
-                            <input type="radio" name="calcMode" value="roof" onchange="switchMode('roof')" class="accent-emerald-400">
-                            <span class="text-xs text-gray-300">건축물 기준 (지붕)</span>
-                        </label>
-                    </div>
-                    
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex items-center justify-between">
-                        <span class="text-xs text-gray-500" id="inputLabel">가용 실측 면적 (㎡)</span>
+                        <span class="text-xs text-gray-500">지붕 가용 실측 면적 입력 (㎡)</span>
                         <input type="number" id="customArea" oninput="calculateValues()" class="w-32 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
                     </div>
 
@@ -186,7 +159,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 분석 중...</span>
+                        <span>국토부 건축물대장 원본 대조 중...</span>
                     </div>
                 </div>
             </div>
@@ -197,7 +170,6 @@ HTML_TEMPLATE = """
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=""" + (KAKAO_JS_KEY if KAKAO_JS_KEY else "") + """&libraries=services"></script>
     <script>
         let map, marker, ps, geocoder;
-        let rawLandArea = 0;
         let rawArchArea = 0;
 
         document.addEventListener("DOMContentLoaded", function() {
@@ -213,19 +185,6 @@ HTML_TEMPLATE = """
             
             startAnalysis();
         });
-
-        function switchMode(mode) {
-            let areaInput = document.getElementById('customArea');
-            if (mode === 'land') {
-                let netYardArea = rawLandArea - rawArchArea;
-                areaInput.value = netYardArea > 0 ? netYardArea.toFixed(2) : (rawLandArea > 0 ? rawLandArea.toFixed(2) : "0.00");
-                document.getElementById('inputLabel').innerText = "마당 가용 면적 (㎡)";
-            } else {
-                areaInput.value = rawArchArea > 0 ? rawArchArea.toFixed(2) : "0.00";
-                document.getElementById('inputLabel').innerText = "지붕 가용 면적 (㎡)";
-            }
-            calculateValues();
-        }
 
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
@@ -261,31 +220,21 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
-                    if(data.vworld_success) {
-                        rawLandArea = data.vworld_area ? parseFloat(data.vworld_area) : 0.0;
-                        document.getElementById('vwPnu').innerText = data.pnu;
-                        document.getElementById('vwJimok').innerText = data.vworld_jimok;
-                        document.getElementById('vwArea').innerText = rawLandArea.toLocaleString();
-                        document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
-                    } else {
-                        rawLandArea = 0.0;
-                        document.getElementById('vwPnu').innerText = data.vworld_error_msg ? `에러: ${data.vworld_error_msg}` : `${data.pnu} (지적데이터 없음)`;
-                        document.getElementById('vwJimok').innerText = "-";
-                        document.getElementById('vwArea').innerText = "0";
-                        document.getElementById('vwJiga').innerText = "0";
-                    }
-
                     if(data.building_success) {
                         rawArchArea = data.arch_area ? parseFloat(data.arch_area) : 0.0;
+                        document.getElementById('targetJibun').innerText = `${data.sigungu_cd}-${data.bjdong_cd} ${parseInt(data.bun)}-${parseInt(data.ji)}`;
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
                         document.getElementById('bdTotArea').innerText = data.tot_area.toLocaleString();
+                        document.getElementById('customArea').value = rawArchArea.toFixed(2);
                     } else {
                         rawArchArea = 0.0;
+                        document.getElementById('targetJibun').innerText = data.error_msg ? `대장조회실패: ${data.error_msg}` : "건축물 없음 (나대지)";
                         document.getElementById('bdArchArea').innerText = "0";
                         document.getElementById('bdTotArea').innerText = "0";
+                        document.getElementById('customArea').value = "0.00";
                     }
 
-                    switchMode(document.querySelector('input[name="calcMode"]:checked').value);
+                    calculateValues();
                 }).catch(err => {
                     console.error(err);
                     document.getElementById('loadingMsg').classList.add('hidden');
@@ -302,8 +251,7 @@ HTML_TEMPLATE = """
             let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
             if (isNaN(kwCostInput) || kwCostInput <= 0) kwCostInput = 800000;
             
-            const currentMode = document.querySelector('input[name="calcMode"]:checked').value;
-            let unitPrice = (currentMode === 'land') ? (130 + 70 * 1.2) : (130 + 70 * 1.5);
+            let unitPrice = 130 + 70 * 1.5; // 지붕 가중치 고정
             
             const annualGeneration = kw * 3.6 * 365;
             const annualRevenue = annualGeneration * unitPrice;
@@ -325,7 +273,7 @@ HTML_TEMPLATE = """
                 document.getElementById('paybackLabel').innerText = "-";
             }
 
-            let rentUnitPrice = (currentMode === 'land') ? 30000 : 35000;
+            let rentUnitPrice = 35000; // 지붕임대 단가 고정
             document.getElementById('rentAnnual').innerText = Math.round(kw * rentUnitPrice).toLocaleString();
             document.getElementById('rentMonthly').innerText = Math.round((kw * rentUnitPrice) / 12).toLocaleString();
         }
@@ -343,9 +291,8 @@ def api_analyze():
     addr = request.args.get('address', '')
     
     out_data = {
-        "vworld_success": False, "pnu": "-", "vworld_jimok": "-", "vworld_area": 0.0, "vworld_jiga": 0,
-        "vworld_error_msg": "", 
-        "building_success": False, "arch_area": 0.0, "tot_area": 0.0
+        "building_success": False, "arch_area": 0.0, "tot_area": 0.0,
+        "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
     }
     
     if not addr:
@@ -372,100 +319,36 @@ def api_analyze():
                 ji = sub_no.zfill(4) if sub_no else '0000'
                 
                 full_jibun_name = jibun_info.get('address_name', '')
-                
-                pnu_land_type = '2' if "산" in full_jibun_name else '1'
                 molit_plat_gb = '1' if "산" in full_jibun_name else '0'
                 
-                pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
-                out_data["pnu"] = pnu
+                out_data["sigungu_cd"] = sigungu_cd
+                out_data["bjdong_cd"] = bjdong_cd
+                out_data["bun"] = bun
+                out_data["ji"] = ji
 
-                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-
-                v_success_count = 0
-
-                # 🚨 [핵심 수정] 1. 토지특성정보 조회 API (진짜 VWorld 규격에 맞춰 파싱 패스 수정)
-                if VWORLD_API_KEY:
-                    char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
-                    char_params = {
-                        "key": VWORLD_API_KEY,
-                        "domain": domain_clean,
-                        "pnu": pnu,
-                        "format": "json"
-                    }
-                    char_headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Referer": f"https://{domain_clean}"
-                    }
-                    
-                    try:
-                        char_res = requests.get(char_url, params=char_params, headers=char_headers, timeout=5)
-                        if char_res.status_code == 200:
-                            char_json = char_res.json()
-                            
-                            # 📌 친구분이 짚어준 대박 억까 패스 구조체로 전면 수정!!
-                            char_list = char_json.get("landCharacteristicss", {}).get("field", [])
-                            if char_list:
-                                props = char_list[0]
-                                out_data["vworld_jimok"] = props.get("lndcgrCodeNm", "-")
-                                area_val = props.get("lndpclAr")
-                                out_data["vworld_area"] = float(area_val) if area_val else 0.0
-                                v_success_count += 1
-                    except Exception as e:
-                        print(f"Land API Parsing Error: {e}")
-
-                # 2. 브이월드 연속지적도 API (공시지가) - HTTPS 및 헤더 보강
-                if VWORLD_API_KEY:
-                    v_params = {
-                        "service": "data",
-                        "version": "2.0",
-                        "request": "GetFeature",
-                        "format": "json",
-                        "data": "LP_PA_CBND_BUBUN",
-                        "geometry": "false", 
-                        "attribute": "true",
-                        "attrFilter": f"pnu:=:{pnu}",
-                        "key": VWORLD_API_KEY,
-                        "domain": domain_clean
-                    }
-                    v_headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Referer": f"https://{domain_clean}"
-                    }
-                    
-                    try:
-                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
-                        if v_res.status_code == 200:
-                            v_json = v_res.json()
-                            response_block = v_json.get("response", {})
-                            if response_block.get("status") != "ERROR":
-                                features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
-                                if features:
-                                    props = features[0].get("properties", {})
-                                    jiga_val = props.get("jiga", 0)
-                                    out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
-                                    v_success_count += 1
-                    except Exception as e:
-                        print(f"Cadastral API Error: {e}")
-
-                if v_success_count > 0:
-                    out_data["vworld_success"] = True
-
-                # 3. 국토부 건축물대장 호출
+                # 3. 국토부 건축물대장 호출 (인코딩 우회 처리)
                 if DATA_GO_KR_KEY:
-                    bld_params = {
-                        'serviceKey': DATA_GO_KR_KEY, 
-                        'sigunguCd': sigungu_cd, 
-                        'bjdongCd': bjdong_cd, 
-                        'platGbCd': molit_plat_gb,
-                        'bun': bun, 
-                        'ji': ji,
-                        'numOfRows': '1', 
-                        'pageNo': '1'
-                    }
-                    try:
-                        bld_res = requests.get("https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo", params=bld_params, timeout=5)
-                        if bld_res.status_code == 200 and ("archArea" in bld_res.text or "archarea" in bld_res.text):
+                    # 공공데이터포털 인코딩 오류 차단용 세션(Session) 객체 및 Raw URL 조립 구조로 변경
+                    s = requests.Session()
+                    bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
+                    
+                    # 파라미터를 파이썬이 재인코딩하지 못하도록 직접 스트링으로 연결하여 찌름
+                    raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=1&pageNo=1"
+                    
+                    bld_res = s.get(raw_full_url, timeout=5)
+                    
+                    if bld_res.status_code == 200:
+                        # 정상 데이터를 받았을 때만 파싱
+                        if "archArea" in bld_res.text or "archarea" in bld_res.text:
                             root = ET.fromstring(bld_res.text)
+                            
+                            # 공공데이터 리턴 상태값 체크
+                            result_code = root.find('.//resultCode')
+                            if result_code is not None and result_code.text != "00":
+                                result_msg = root.find('.//resultMsg')
+                                out_data["error_msg"] = result_msg.text if result_msg is not None else "공공데이터포털키에러"
+                                return jsonify(out_data)
+                                
                             arch_node = root.find('.//archArea') or root.find('.//archarea')
                             tot_node = root.find('.//totArea') or root.find('.//totarea')
                             
@@ -476,10 +359,16 @@ def api_analyze():
                                 out_data["building_success"] = True
                                 out_data["arch_area"] = arch_val
                                 out_data["tot_area"] = tot_val
-                    except Exception as e:
-                        print(f"Building API Error: {e}")
+                        else:
+                            if "resultMsg" in bld_res.text:
+                                root = ET.fromstring(bld_res.text)
+                                msg = root.find('.//resultMsg')
+                                out_data["error_msg"] = msg.text if msg is not None else "키오류 또는 데이터부재"
+                    else:
+                        out_data["error_msg"] = f"국토부서버응답실패({bld_res.status_code})"
 
     except Exception as e:
+        out_data["error_msg"] = str(e)
         print(f"API Error: {e}")
 
     return jsonify(out_data)
