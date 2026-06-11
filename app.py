@@ -14,7 +14,7 @@ DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = "solar-dashboard-daegu.vercel.app" # Vercel 도메인 고정
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "http://localhost:5000")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -27,9 +27,10 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { background-color: #0B0F19; font-family: 'Pretendard', sans-serif; color: #E5E7EB; }
-        /* details 열렸을 때 화살표 회전 애니메이션 */
+        /* details 열렸을 때 기본 화살표 숨김 */
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
+        .map-container { min-height: 400px; height: 100%; border-radius: 1rem; }
     </style>
 </head>
 <body class="p-4 md:p-6 max-w-7xl mx-auto">
@@ -46,7 +47,7 @@ HTML_TEMPLATE = """
     <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-6 flex flex-col sm:flex-row gap-3 items-stretch shadow-xl">
         <div class="relative flex-grow">
             <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-500"></i>
-            <input type="text" id="addressInput" value="대구광역시 달성군 화원읍 설화리 1" 
+            <input type="text" id="addressInput" value="대구광역시 수성구 범어동 1" 
                    class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-11 pr-4 py-3 text-white font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm md:text-base">
         </div>
         <button onclick="startAnalysis()" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm md:text-base whitespace-nowrap">
@@ -54,13 +55,9 @@ HTML_TEMPLATE = """
         </button>
     </div>
 
-    <div id="loadingMsg" class="hidden text-center text-emerald-400 font-bold py-4 mb-4 bg-gray-900 rounded-xl border border-gray-800">
-        <i class="fa-solid fa-spinner fa-spin mr-2"></i> 데이터를 수집하고 있습니다...
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <div class="flex flex-col gap-4">
+        <div class="lg:col-span-5 flex flex-col gap-4">
             
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
@@ -101,16 +98,7 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
             </div>
-            
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-xl text-center">
-                <a href="https://online.kepco.co.kr/EWM092D00" target="_blank" class="block w-full bg-gray-950 hover:bg-gray-850 border border-gray-800 text-gray-300 text-xs py-2.5 rounded-xl font-medium transition-all">
-                    🌐 한전ON 선로 용량 조회 바로가기
-                </a>
-            </div>
 
-        </div>
-
-        <div class="flex flex-col">
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800">
                     <div class="flex items-center gap-2">
@@ -120,7 +108,6 @@ HTML_TEMPLATE = """
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
-                    
                     <div class="flex gap-2">
                         <label class="flex-1 bg-gray-950 border border-gray-800 p-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:border-gray-700">
                             <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500">
@@ -190,19 +177,42 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
                     </div>
-
                 </div>
             </details>
+        </div>
+
+        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex flex-col min-h-[400px]">
+            <div id="map" class="w-full map-container relative">
+                <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
+                    <div class="text-emerald-400 font-bold flex flex-col items-center">
+                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
+                        <span>데이터 수집 및 통신 중...</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>
 
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=""" + (KAKAO_JS_KEY if KAKAO_JS_KEY else "") + """&libraries=services"></script>
     <script>
+        let map, marker, ps, geocoder;
         let rawLandArea = 0;
         let rawArchArea = 0;
-        let ps = new kakao.maps.services.Places();
-        let geocoder = new kakao.maps.services.Geocoder();
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const mapContainer = document.getElementById('map');
+            const defaultPos = new kakao.maps.LatLng(35.8596, 128.6254); 
+            
+            map = new kakao.maps.Map(mapContainer, { center: defaultPos, level: 2 });
+            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); 
+            
+            ps = new kakao.maps.services.Places(); 
+            geocoder = new kakao.maps.services.Geocoder();
+            marker = new kakao.maps.Marker({ map: map, position: defaultPos });
+            
+            startAnalysis();
+        });
 
         function switchMode(mode) {
             if (mode === 'land') {
@@ -216,6 +226,7 @@ HTML_TEMPLATE = """
             calculateValues();
         }
 
+        // 상호명 검색 및 마커 이동 로직 정상 복구
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
             if(!addr) return;
@@ -224,10 +235,17 @@ HTML_TEMPLATE = """
 
             ps.keywordSearch(addr, function(data, status) {
                 if (status === kakao.maps.services.Status.OK) {
-                    fetchBackendData(data[0].address_name || data[0].road_address_name);
+                    const place = data[0];
+                    const coords = new kakao.maps.LatLng(place.y, place.x);
+                    marker.setPosition(coords);
+                    map.setCenter(coords);
+                    fetchBackendData(place.address_name || place.road_address_name);
                 } else {
                     geocoder.addressSearch(addr, function(result, status) {
                         if (status === kakao.maps.services.Status.OK) {
+                            const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                            marker.setPosition(coords);
+                            map.setCenter(coords);
                             fetchBackendData(addr);
                         } else {
                             fetchBackendData(addr);
