@@ -5,7 +5,6 @@ import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
-# .env 환경변수 로드
 load_dotenv()
 
 app = Flask(__name__)
@@ -14,7 +13,7 @@ DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "https://solar-dashboard-daegu.vercel.app/")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -39,7 +38,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 종합 관제 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 및 맵 복원 Ver.</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld 연속지적도 & 토지특성조회 교차 연동 Ver.</p>
         </div>
     </header>
 
@@ -61,11 +60,11 @@ HTML_TEMPLATE = """
             
             <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-map-location-dot"></i> VWorld 토지 지적 정보
+                    <i class="fa-solid fa-map-location-dot"></i> 토지 지적 & 특성 정보
                 </h3>
                 <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 mb-3 text-center">
-                    <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호</span>
-                    <span id="vwPnu" class="text-sm font-mono text-gray-300">-</span>
+                    <span class="text-[11px] text-gray-500 block mb-1">PNU 고유번호 / 상태</span>
+                    <span id="vwPnu" class="text-sm font-mono font-bold text-amber-500">-</span>
                 </div>
                 <div class="grid grid-cols-2 gap-3 text-center mb-3">
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
@@ -73,7 +72,7 @@ HTML_TEMPLATE = """
                         <span id="vwJimok" class="text-base font-black text-amber-400">-</span>
                     </div>
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850">
-                        <span class="text-[11px] text-gray-500 block mb-1">토지 면적</span>
+                        <span class="text-[11px] text-gray-500 block mb-1">토지 대장 면적</span>
                         <span id="vwArea" class="text-base font-bold text-white">0.00</span> <span class="text-[11px] text-gray-400">㎡</span>
                     </div>
                 </div>
@@ -137,7 +136,7 @@ HTML_TEMPLATE = """
                         </h3>
                         
                         <div class="mb-4 bg-gray-950 p-2.5 rounded-lg border border-amber-900/30">
-                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 조정 (원)</label>
+                            <label class="text-[10px] text-amber-400 font-semibold block mb-1">kW당 공사 단가 커스텀 (원)</label>
                             <input type="number" id="kwCostInput" value="800000" step="10000" oninput="calculateValues()" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -158,7 +157,7 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">리스크 제로</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대(50kW이상)
                         </h3>
@@ -186,7 +185,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>데이터 수집 및 분석 중...</span>
+                        <span>데이터 수집 및 PNU 연동 중...</span>
                     </div>
                 </div>
             </div>
@@ -238,7 +237,6 @@ HTML_TEMPLATE = """
                     const coords = new kakao.maps.LatLng(place.y, place.x);
                     marker.setPosition(coords);
                     map.setCenter(coords);
-                    // 상호명 검색 시에도 해당 장소의 정확한 주소를 백엔드로 토스
                     fetchBackendData(place.address_name || place.road_address_name);
                 } else {
                     geocoder.addressSearch(addr, function(result, status) {
@@ -261,6 +259,7 @@ HTML_TEMPLATE = """
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
                     
+                    // VWorld & 국토부 토지 데이터 통합 바인딩
                     if(data.vworld_success) {
                         rawLandArea = data.vworld_area;
                         document.getElementById('vwPnu').innerText = data.pnu;
@@ -269,7 +268,7 @@ HTML_TEMPLATE = """
                         document.getElementById('vwJiga').innerText = parseInt(data.vworld_jiga).toLocaleString();
                     } else {
                         rawLandArea = 0;
-                        document.getElementById('vwPnu').innerText = data.pnu !== "-" ? data.pnu + " (정보없음)" : "조회 실패";
+                        document.getElementById('vwPnu').innerText = data.vworld_error_msg ? `에러: ${data.vworld_error_msg}` : `${data.pnu} (DB 없음)`;
                         document.getElementById('vwJimok').innerText = "-";
                         document.getElementById('vwArea').innerText = "0";
                         document.getElementById('vwJiga').innerText = "0";
@@ -344,6 +343,7 @@ def api_analyze():
     
     out_data = {
         "vworld_success": False, "pnu": "-", "vworld_jimok": "-", "vworld_area": 0.0, "vworld_jiga": 0,
+        "vworld_error_msg": "", 
         "building_success": False, "arch_area": 0.0, "tot_area": 0.0
     }
     
@@ -351,14 +351,12 @@ def api_analyze():
         return jsonify(out_data)
 
     try:
-        # 카카오 로컬 API로 주소의 지번 요소 완벽 추출
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
         k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
         documents = k_res.json().get('documents', [])
         
         if documents:
             addr_data = documents[0]
-            # 도로명이나 키워드로 검색했어도 카카오는 'address'(순수 지번) 객체를 던져줍니다.
             jibun_info = addr_data.get('address') 
             
             if jibun_info:
@@ -374,47 +372,80 @@ def api_analyze():
                 
                 full_jibun_name = jibun_info.get('address_name', '')
                 
-                # 규격 분기 1: VWorld PNU 용
                 pnu_land_type = '2' if "산" in full_jibun_name else '1'
-                
-                # 규격 분기 2: 국토부 대지구분코드 용
                 molit_plat_gb = '1' if "산" in full_jibun_name else '0'
                 
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
 
-                # 브이월드 호출
+                v_success_count = 0
+
+                # [API 1]: VWorld 연속지적도 호출 (공시지가 파싱용)
                 if VWORLD_API_KEY:
                     v_params = {
                         "service": "data",
                         "version": "2.0",
                         "request": "GetFeature",
+                        "format": "json",
                         "data": "LP_PA_CBND_BUBUN",
-                        "key": VWORLD_API_KEY,
-                        "domain": VWORLD_DOMAIN,
-                        "attrFilter": f"pnu:=:{pnu}",
                         "geometry": "false", 
-                        "crs": "EPSG:4326"
+                        "attribute": "true",
+                        "attrFilter": f"pnu:=:{pnu}",
+                        "key": VWORLD_API_KEY,
+                        "domain": VWORLD_DOMAIN
                     }
                     
-                    referer_url = VWORLD_DOMAIN if VWORLD_DOMAIN.startswith("http") else f"https://{VWORLD_DOMAIN}"
-                    v_headers = {"Referer": referer_url}
+                    v_headers = {
+                        "User-Agent": "Mozilla/5.0",
+                        "Referer": f"https://{VWORLD_DOMAIN}" if "http" not in VWORLD_DOMAIN else VWORLD_DOMAIN
+                    }
                     
-                    v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                    v_res = requests.get("http://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
                     
                     if v_res.status_code == 200:
                         v_json = v_res.json()
-                        features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
-                        if features:
-                            props = features[0].get("properties", {})
-                            out_data["vworld_success"] = True
-                            out_data["vworld_jimok"] = props.get("jimok", "-")
-                            parea_val = props.get("parea", 0)
-                            out_data["vworld_area"] = float(parea_val) if parea_val else 0.0
-                            jiga_val = props.get("jiga", 0)
-                            out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
+                        response_block = v_json.get("response", {})
+                        
+                        if response_block.get("status") == "ERROR":
+                            out_data["vworld_error_msg"] = response_block.get("error", {}).get("text", "VWorld 에러")
+                        else:
+                            features = response_block.get("result", {}).get("featureCollection", {}).get("features", [])
+                            if features:
+                                props = features[0].get("properties", {})
+                                jiga_val = props.get("jiga", 0)
+                                out_data["vworld_jiga"] = int(jiga_val) if jiga_val else 0
+                                v_success_count += 1
 
-                # 국토부 건축물대장 호출
+                # [API 2]: 국토부 토지특성속성조회 (지목, 면적 파싱용)
+                if DATA_GO_KR_KEY:
+                    land_params = {
+                        'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
+                        'pnu': pnu,
+                        'numOfRows': '1', 
+                        'pageNo': '1'
+                    }
+                    # 국토부 토지특성 API 주소 (VWorld getLandCharacteristics 와 동일 역할)
+                    land_res = requests.get("https://apis.data.go.kr/1611000/nsdi/LandCharacteristicsService/attr/getLandCharacteristics", params=land_params, timeout=5)
+                    
+                    if land_res.status_code == 200 and "<lndcgrCodeNm>" in land_res.text:
+                        root = ET.fromstring(land_res.text)
+                        
+                        jimok_node = root.find('.//lndcgrCodeNm')
+                        area_node = root.find('.//lndpclAr')
+                        
+                        if jimok_node is not None and jimok_node.text:
+                            out_data["vworld_jimok"] = jimok_node.text
+                            
+                        if area_node is not None and area_node.text:
+                            out_data["vworld_area"] = float(area_node.text)
+                            
+                        v_success_count += 1
+
+                # 둘 다 성공했거나, 하나라도 데이터를 건졌다면 성공 처리
+                if v_success_count > 0:
+                    out_data["vworld_success"] = True
+
+                # [API 3]: 국토부 건축물대장 호출 (건축면적 파싱용)
                 if DATA_GO_KR_KEY:
                     bld_params = {
                         'serviceKey': requests.utils.unquote(DATA_GO_KR_KEY),
