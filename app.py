@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 # .env 환경변수 로드
 load_dotenv()
 
-# 🚨 [Vercel 빌드 100% 통과용 전진 배치] 
-# 빌더가 진입 객체를 바로 낚아채도록 Flask 인스턴스와 환경변수를 파일 최상단에 둡니다.
+# 🚨 [1순위 고정] 파이썬 컴파일러가 가장 먼저 실행해야 하는 핵심 진입점 선언
 app = Flask(__name__)
 
+# 환경변수 안전 바인딩
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
@@ -19,6 +19,7 @@ VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
 VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 
+# 🚨 [2순위 고정] 공통 헬퍼 함수
 def parse_building_xml_advanced(xml_text):
     try:
         root = ET.fromstring(xml_text.encode('utf-8'))
@@ -58,7 +59,7 @@ def parse_building_xml_advanced(xml_text):
     return plat_out, arch_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
 
 
-# 🚨 라우터를 상단 배치하여 문법적 가독성을 Vercel 빌더에게 우선 제공합니다.
+# 🚨 [3순위 고정] 위에서 app 객체가 무조건 생성된 직후이므로 이제 정상 라우팅 연동 가능
 @app.route('/')
 def index():
     return HTML_TEMPLATE
@@ -114,7 +115,7 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # [1단계] 건축물대장 3중 방어 호출
+                # 1. 국토부 건축물대장 3중 필터 호출
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
@@ -146,7 +147,7 @@ def api_analyze():
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # [2단계] 친구분 필터 이식: 나대지일 때 연속지적도 다이렉트 area 추출
+                # 2. 친구분 필터 이식: 나대지일 때 연속지적도 다이렉트 area 추출
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -173,7 +174,7 @@ def api_analyze():
                     except Exception as ve:
                         print(f"Cadastral Track Error: {ve}")
 
-                # 데이터 조립 완료 후 리턴
+                # 최종 데이터 마샬링 후 리턴
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -190,7 +191,7 @@ def api_analyze():
     return jsonify(out_data)
 
 
-# 🚨 [하단 격리 조치] VWorld 방해 요소인 수백 줄짜리 거대 템플릿은 파일의 가장 끝부분에 배치합니다.
+# 🚨 [4순위 고정] 거대 HTML 데이터 레이어는 실행 흐름을 방해하지 못하게 소스코드 맨 밑바닥으로 완전히 내렸습니다.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -283,7 +284,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
