@@ -8,7 +8,17 @@ from dotenv import load_dotenv
 # .env 환경변수 로드
 load_dotenv()
 
-# 🚨 [Vercel 빌드 패스 우회] 거대 문자열 덩어리를 파일 최상단으로 격리 배치합니다.
+# 🚨 [Vercel 진입점 단일 선언] Flask 객체는 오직 이곳에서 딱 한 번만 선언합니다.
+app = Flask(__name__)
+
+# 환경변수 안전 바인딩
+DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
+KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
+KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
+VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
+
+# 거대 렌더링 템플릿 격리
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -101,7 +111,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
@@ -323,15 +333,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# 🚨 [Vercel 최적화 핵심 선언] 거대 문자열 하단부 레이어에 WSGI 진입 인스턴스를 무조건 독점 노출합니다.
-app = Flask(__name__)
-
-# 환경변수 동기화 재바인딩
-DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
-KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
-KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
-VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 def parse_building_xml_advanced(xml_text):
     try:
@@ -459,7 +460,7 @@ def api_analyze():
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # 🚨 [2단계 친구분 필터 완벽 이식] 지붕 면적이 1㎡ 미만인 순수 나대지일 때 연속지적도 다이렉트 area 추출
+                # [2단계] 건축면적이 1㎡ 미만인 경우 나대지로 판단하고 VWorld 연속지적도 무력화 area 파싱
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -476,8 +477,6 @@ def api_analyze():
                             
                             if features:
                                 props = features[0].get("properties", {})
-                                
-                                # 📌 친구분의 특급 솔루션 반영: 연속지적도 area 필드를 바로 토지면적으로 매칭!
                                 if props.get("area"):
                                     p_val = float(props.get("area"))
                                     
@@ -488,7 +487,7 @@ def api_analyze():
                     except Exception as ve:
                         print(f"Cadastral Track Error: {ve}")
 
-                # 최종 데이터 포장 반환 완료
+                # 최종 데이터 결합 반환
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -501,7 +500,6 @@ def api_analyze():
 
     except Exception as e:
         out_data["error_msg"] = str(e)
-        print(f"System Matrix Error: {e}")
 
     return jsonify(out_data)
 
