@@ -10,7 +10,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# 환경변수 바인딩
+# 환경변수 안전 바인딩
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
@@ -109,7 +109,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
@@ -279,7 +279,7 @@ HTML_TEMPLATE = """
                     document.getElementById('bdAppPrvlDate').innerText = data.app_prvl_date;
                     document.getElementById('bdSourceInfo').innerText = data.source_api;
 
-                    let radioToSelect = (rawArchArea === 0 && rawPlatArea > 0) ? "land" : "roof";
+                    let radioToSelect = (rawArchArea < 1.0 && rawPlatArea > 0) ? "land" : "roof";
                     document.querySelector(`input[name="calcMode"][value="${radioToSelect}"]`).checked = true;
 
                     switchMode(radioToSelect);
@@ -424,64 +424,78 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # 1. 국토교통부 건축물대장 데이터 시도
+                # [1단계] 건축물대장 3중 방어 호출
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
                         res_1 = s.get(url_1, timeout=5)
                         if res_1.status_code == 200:
                             p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
-                            if item_count > 0 and a_val > 0:
+                            if item_count > 0 and a_val > 0.0:
                                 source_api = "국토부 일반표제부"
                     except Exception:
                         pass
 
-                # 2. 순수 나대지(a_val == 0)일 때 브이월드 데이터 강제 주입 로직 고도화
-                if a_val == 0.0 and VWORLD_API_KEY:
-                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
-                    
-                    # 공시지가 가져오기
+                    if item_count == 0 or a_val == 0.0:
+                        url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        try:
+                            res_2 = s.get(url_2, timeout=5)
+                            if res_2.status_code == 200:
+                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
+                                if item_count > 0 and a_val > 0.0:
+                                    source_api = "국토부 총괄표제부"
+                        except Exception:
+                            pass
+
+                    if item_count == 0 or a_val == 0.0:
+                        url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        try:
+                            res_3 = s.get(url_3, timeout=5)
+                            if res_3.status_code == 200:
+                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
+                                if item_count > 0 and a_val > 0.0:
+                                    source_api = "국토부 층별개요부"
+
+                # 🚨 [2단계 친구분 최적화 로직 반영]: 건축면적(지붕)이 1㎡ 미만인 순수 나대지일 때 VWorld 연속지적도 다이렉트 area 파싱
+                if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
                         "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
                         "attrFilter": f"pnu:=:{pnu}", "key": VWORLD_API_KEY, "domain": domain_clean
                     }
+                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
+                    
                     try:
                         v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                        
+                        # 터미널 디버깅 로그 추가
+                        print("="*50)
+                        print(f"[나대지 연속지적도 조회] PNU: {pnu}")
+                        print(f"응답 코드: {v_res.status_code}")
+                        
                         if v_res.status_code == 200:
                             v_json = v_res.json()
                             features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
+                            
                             if features:
                                 props = features[0].get("properties", {})
-                                out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
-                    except Exception:
-                        pass
-
-                    # 🚨 [해결 지점] 토지특성조회 API 호출 및 면적 필드(lndpclAr -> plat_area) 결합 복원
-                    char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
-                    char_params = {"key": VWORLD_API_KEY, "domain": domain_clean, "pnu": pnu, "format": "json"}
-                    
-                    try:
-                        char_res = requests.get(char_url, params=char_params, headers=v_headers, timeout=5)
-                        if char_res.status_code == 200:
-                            char_json = char_res.json()
-                            char_list = char_json.get("landCharacteristics", {}).get("field", [])
-                            if not char_list:
-                                # VWorld API의 구조적 노이즈(s 누락/추가) 방어 코드
-                                char_list = char_json.get("landCharacteristicss", {}).get("field", [])
                                 
-                            if char_list:
-                                props = char_list[0]
-                                # 브이월드가 주는 토지면적(lndpclAr)을 추출하여 p_val에 강제 주입
-                                p_val = float(props.get("lndpclAr", 0.0)) if props.get("lndpclAr") else 0.0
-                                purps = props.get("lndcgrCodeNm", "토지 나대지")
-                                source_api = "브이월드 연속지적도"
+                                # 📌 불안정한 토지특성 API 대신 안정적인 연속지적도의 area 필드를 그대로 토지면적으로 대체!
+                                if props.get("area"):
+                                    p_val = float(props.get("area"))
+                                    
+                                out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
+                                purps = props.get("jibun", "순수 나대지") + " (지적)"
+                                source_api = "VWorld 연속지적도(면적 연동)"
                                 item_count = 1
-                    except Exception:
-                        pass
+                            else:
+                                print("➔ [알림] 해당 PNU의 지적도 피처가 존재하지 않습니다.")
+                        print("="*50)
+                    except Exception as ve:
+                        print(f"Cadastral Track Error: {ve}")
 
-                # 최종 데이터 마샬링 및 클라이언트 전송
-                if item_count > 0 or p_val > 0 or a_val > 0:
+                # 최종 데이터 마샬링 후 전송
+                if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
                     out_data["arch_area"] = a_val
@@ -489,10 +503,11 @@ def api_analyze():
                     out_data["app_prvl_date"] = dates if dates else "-"
                     out_data["source_api"] = source_api
                 else:
-                    out_data["error_msg"] = "데이터 부재 (수동 입력 필요)"
+                    out_data["error_msg"] = "공적장부 조회 데이터 없음"
 
     except Exception as e:
         out_data["error_msg"] = str(e)
+        print(f"System Matrix Error: {e}")
 
     return jsonify(out_data)
 
