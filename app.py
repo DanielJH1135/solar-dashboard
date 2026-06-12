@@ -283,7 +283,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
