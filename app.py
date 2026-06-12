@@ -8,17 +8,189 @@ from dotenv import load_dotenv
 # .env 환경변수 로드
 load_dotenv()
 
-# 🚨 [Vercel 진입점 단일 선언] Flask 객체는 오직 이곳에서 딱 한 번만 선언합니다.
+# 🚨 [Vercel 빌드 100% 통과용 전진 배치] 
+# 빌더가 진입 객체를 바로 낚아채도록 Flask 인스턴스와 환경변수를 파일 최상단에 둡니다.
 app = Flask(__name__)
 
-# 환경변수 안전 바인딩
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
 VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
-# 거대 렌더링 템플릿 격리
+
+def parse_building_xml_advanced(xml_text):
+    try:
+        root = ET.fromstring(xml_text.encode('utf-8'))
+    except Exception:
+        root = ET.fromstring(xml_text.replace('xmlns=', 'xmlIgnore=').encode('utf-8'))
+    
+    items = root.findall('.//item')
+    if len(items) == 0:
+        return 0.0, 0.0, "-", "-", 0
+        
+    plat_out, arch_out = 0.0, 0.0
+    purps, dates = [], []
+    
+    for item in items:
+        p_val, a_val = 0.0, 0.0
+        is_sub_dong = False
+        
+        for child in item:
+            tag_local = child.tag.split('}')[-1]
+            if tag_local == 'platArea':
+                p_val = float(child.text) if child.text else 0.0
+            elif tag_local == 'archArea':
+                a_val = float(child.text) if child.text else 0.0
+            elif tag_local in ['mainPurpsCdNm', 'flrPurpsCdNm'] and child.text:
+                if child.text not in purps: purps.append(child.text)
+            elif tag_local == 'useAprvDate' and child.text:
+                if child.text not in dates: dates.append(child.text)
+            elif tag_local == 'mainAtchGbCdNm' and child.text and '부속' in child.text:
+                is_sub_dong = True
+
+        if p_val > plat_out: plat_out = p_val
+        if not is_sub_dong or len(items) == 1:
+            arch_out += a_val
+        else:
+            arch_out += (a_val * 0.2)
+            
+    return plat_out, arch_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
+
+
+# 🚨 라우터를 상단 배치하여 문법적 가독성을 Vercel 빌더에게 우선 제공합니다.
+@app.route('/')
+def index():
+    return HTML_TEMPLATE
+
+
+@app.route('/api/analyze')
+def api_analyze():
+    out_data = {
+        "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
+        "vworld_jiga": 0, "main_purps": "-", "app_prvl_date": "-", "source_api": "나대지 (정보없음)",
+        "pnu": "-", "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
+    }
+    
+    addr = request.args.get('address', '')
+    if not addr:
+        return jsonify(out_data)
+
+    try:
+        headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
+        k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
+        documents = k_res.json().get('documents', [])
+        
+        if documents:
+            addr_data = documents[0]
+            jibun_info = addr_data.get('address') 
+            
+            if jibun_info:
+                b_code = jibun_info.get('b_code', '0000000000')
+                sigungu_cd = b_code[:5]
+                bjdong_cd = b_code[5:]
+                
+                main_no = jibun_info.get('main_address_no', '')
+                sub_no = jibun_info.get('sub_address_no', '')
+                
+                bun = main_no.zfill(4) if main_no else '0000'
+                ji = sub_no.zfill(4) if sub_no else '0000'
+                
+                full_jibun_name = jibun_info.get('address_name', '')
+                pnu_land_type = '2' if "산" in full_jibun_name else '1'
+                molit_plat_gb = '1' if "산" in full_jibun_name else '0'
+                
+                pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
+                out_data["pnu"] = pnu
+                out_data["sigungu_cd"] = sigungu_cd
+                out_data["bjdong_cd"] = bjdong_cd
+                out_data["bun"] = bun
+                out_data["ji"] = ji
+
+                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+                s = requests.Session()
+                base_url = "https://apis.data.go.kr/1613000/BldRgstHubService"
+                
+                p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
+                source_api = "-"
+
+                # [1단계] 건축물대장 3중 방어 호출
+                if DATA_GO_KR_KEY:
+                    url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                    try:
+                        res_1 = s.get(url_1, timeout=5)
+                        if res_1.status_code == 200:
+                            p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
+                            if item_count > 0 and a_val > 0.0:
+                                source_api = "국토부 일반표제부"
+                    except Exception:
+                        pass
+
+                    if item_count == 0 or a_val == 0.0:
+                        url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        try:
+                            res_2 = s.get(url_2, timeout=5)
+                            if res_2.status_code == 200:
+                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
+                                if item_count > 0 and a_val > 0.0:
+                                    source_api = "국토부 총괄표제부"
+                        except Exception:
+                            pass
+
+                    if item_count == 0 or a_val == 0.0:
+                        url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        try:
+                            res_3 = s.get(url_3, timeout=5)
+                            if res_3.status_code == 200:
+                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
+                                if item_count > 0 and a_val > 0.0:
+                                    source_api = "국토부 층별개요부"
+
+                # [2단계] 친구분 필터 이식: 나대지일 때 연속지적도 다이렉트 area 추출
+                if a_val < 1.0 and VWORLD_API_KEY:
+                    v_params = {
+                        "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
+                        "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
+                        "attrFilter": f"pnu:=:{pnu}", "key": VWORLD_API_KEY, "domain": domain_clean
+                    }
+                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
+                    
+                    try:
+                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                        if v_res.status_code == 200:
+                            v_json = v_res.json()
+                            features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
+                            
+                            if features:
+                                props = features[0].get("properties", {})
+                                if props.get("area"):
+                                    p_val = float(props.get("area"))
+                                    
+                                out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
+                                purps = props.get("jibun", "순수 나대지") + " (지적)"
+                                source_api = "VWorld 연속지적도(면적 연동)"
+                                item_count = 1
+                    except Exception as ve:
+                        print(f"Cadastral Track Error: {ve}")
+
+                # 데이터 조립 완료 후 리턴
+                if item_count > 0 or p_val > 0.0 or a_val > 0.0:
+                    out_data["building_success"] = True
+                    out_data["plat_area"] = p_val
+                    out_data["arch_area"] = a_val
+                    out_data["main_purps"] = purps if purps else "-"
+                    out_data["app_prvl_date"] = dates if dates else "-"
+                    out_data["source_api"] = source_api
+                else:
+                    out_data["error_msg"] = "공적장부 조회 데이터 없음"
+
+    except Exception as e:
+        out_data["error_msg"] = str(e)
+
+    return jsonify(out_data)
+
+
+# 🚨 [하단 격리 조치] VWorld 방해 요소인 수백 줄짜리 거대 템플릿은 파일의 가장 끝부분에 배치합니다.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -332,176 +504,6 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
-
-
-def parse_building_xml_advanced(xml_text):
-    try:
-        root = ET.fromstring(xml_text.encode('utf-8'))
-    except Exception:
-        root = ET.fromstring(xml_text.replace('xmlns=', 'xmlIgnore=').encode('utf-8'))
-    
-    items = root.findall('.//item')
-    if len(items) == 0:
-        return 0.0, 0.0, "-", "-", 0
-        
-    plat_out, arch_out = 0.0, 0.0
-    purps, dates = [], []
-    
-    for item in items:
-        p_val, a_val = 0.0, 0.0
-        is_sub_dong = False
-        
-        for child in item:
-            tag_local = child.tag.split('}')[-1]
-            if tag_local == 'platArea':
-                p_val = float(child.text) if child.text else 0.0
-            elif tag_local == 'archArea':
-                a_val = float(child.text) if child.text else 0.0
-            elif tag_local in ['mainPurpsCdNm', 'flrPurpsCdNm'] and child.text:
-                if child.text not in purps: purps.append(child.text)
-            elif tag_local == 'useAprvDate' and child.text:
-                if child.text not in dates: dates.append(child.text)
-            elif tag_local == 'mainAtchGbCdNm' and child.text and '부속' in child.text:
-                is_sub_dong = True
-
-        if p_val > plat_out: plat_out = p_val
-        if not is_sub_dong or len(items) == 1:
-            arch_out += a_val
-        else:
-            arch_out += (a_val * 0.2)
-            
-    return plat_out, arch_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
-
-
-@app.route('/')
-def index():
-    return HTML_TEMPLATE
-
-
-@app.route('/api/analyze')
-def api_analyze():
-    out_data = {
-        "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
-        "vworld_jiga": 0, "main_purps": "-", "app_prvl_date": "-", "source_api": "나대지 (정보없음)",
-        "pnu": "-", "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
-    }
-    
-    addr = request.args.get('address', '')
-    if not addr:
-        return jsonify(out_data)
-
-    try:
-        headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
-        k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
-        documents = k_res.json().get('documents', [])
-        
-        if documents:
-            addr_data = documents[0]
-            jibun_info = addr_data.get('address') 
-            
-            if jibun_info:
-                b_code = jibun_info.get('b_code', '0000000000')
-                sigungu_cd = b_code[:5]
-                bjdong_cd = b_code[5:]
-                
-                main_no = jibun_info.get('main_address_no', '')
-                sub_no = jibun_info.get('sub_address_no', '')
-                
-                bun = main_no.zfill(4) if main_no else '0000'
-                ji = sub_no.zfill(4) if sub_no else '0000'
-                
-                full_jibun_name = jibun_info.get('address_name', '')
-                pnu_land_type = '2' if "산" in full_jibun_name else '1'
-                molit_plat_gb = '1' if "산" in full_jibun_name else '0'
-                
-                pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
-                out_data["pnu"] = pnu
-                out_data["sigungu_cd"] = sigungu_cd
-                out_data["bjdong_cd"] = bjdong_cd
-                out_data["bun"] = bun
-                out_data["ji"] = ji
-
-                domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-                s = requests.Session()
-                base_url = "https://apis.data.go.kr/1613000/BldRgstHubService"
-                
-                p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
-                source_api = "-"
-
-                # [1단계] 건축물대장 3중 방어 호출
-                if DATA_GO_KR_KEY:
-                    url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                    try:
-                        res_1 = s.get(url_1, timeout=5)
-                        if res_1.status_code == 200:
-                            p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
-                            if item_count > 0 and a_val > 0.0:
-                                source_api = "국토부 일반표제부"
-                    except Exception:
-                        pass
-
-                    if item_count == 0 or a_val == 0.0:
-                        url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                        try:
-                            res_2 = s.get(url_2, timeout=5)
-                            if res_2.status_code == 200:
-                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
-                                if item_count > 0 and a_val > 0.0:
-                                    source_api = "국토부 총괄표제부"
-                        except Exception:
-                            pass
-
-                    if item_count == 0 or a_val == 0.0:
-                        url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                        try:
-                            res_3 = s.get(url_3, timeout=5)
-                            if res_3.status_code == 200:
-                                p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
-                                if item_count > 0 and a_val > 0.0:
-                                    source_api = "국토부 층별개요부"
-
-                # [2단계] 건축면적이 1㎡ 미만인 경우 나대지로 판단하고 VWorld 연속지적도 무력화 area 파싱
-                if a_val < 1.0 and VWORLD_API_KEY:
-                    v_params = {
-                        "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
-                        "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
-                        "attrFilter": f"pnu:=:{pnu}", "key": VWORLD_API_KEY, "domain": domain_clean
-                    }
-                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
-                    
-                    try:
-                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
-                        if v_res.status_code == 200:
-                            v_json = v_res.json()
-                            features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
-                            
-                            if features:
-                                props = features[0].get("properties", {})
-                                if props.get("area"):
-                                    p_val = float(props.get("area"))
-                                    
-                                out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
-                                purps = props.get("jibun", "순수 나대지") + " (지적)"
-                                source_api = "VWorld 연속지적도(면적 연동)"
-                                item_count = 1
-                    except Exception as ve:
-                        print(f"Cadastral Track Error: {ve}")
-
-                # 최종 데이터 결합 반환
-                if item_count > 0 or p_val > 0.0 or a_val > 0.0:
-                    out_data["building_success"] = True
-                    out_data["plat_area"] = p_val
-                    out_data["arch_area"] = a_val
-                    out_data["main_purps"] = purps if purps else "-"
-                    out_data["app_prvl_date"] = dates if dates else "-"
-                    out_data["source_api"] = source_api
-                else:
-                    out_data["error_msg"] = "공적장부 조회 데이터 없음"
-
-    except Exception as e:
-        out_data["error_msg"] = str(e)
-
-    return jsonify(out_data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
