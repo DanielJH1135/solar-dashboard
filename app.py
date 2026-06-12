@@ -1,22 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
-from flask import Flask, request, jsonify
 import requests
 import xml.etree.ElementTree as ET
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
 # .env 환경변수 로드
 load_dotenv()
 
-app = Flask(__name__)
-
-# 환경변수 안전 바인딩
-DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
-KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
-KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
-VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
-VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
-
+# 🚨 [Vercel 빌드 패스 우회] 거대 문자열 덩어리를 파일 최상단으로 격리 배치합니다.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -188,7 +180,7 @@ HTML_TEMPLATE = """
             </details>
         </div>
 
-        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-2 shadow-xl flex flex-col min-h-[500px]">
+        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 p-2 shadow-xl flex flex-col min-h-[500px]">
             <div id="map" class="w-full map-container relative">
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
@@ -331,6 +323,16 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# 🚨 [Vercel 최적화 핵심 선언] 거대 문자열 하단부 레이어에 WSGI 진입 인스턴스를 무조건 독점 노출합니다.
+app = Flask(__name__)
+
+# 환경변수 동기화 재바인딩
+DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
+KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
+KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
+VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
+VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
+
 def parse_building_xml_advanced(xml_text):
     try:
         root = ET.fromstring(xml_text.encode('utf-8'))
@@ -373,6 +375,7 @@ def parse_building_xml_advanced(xml_text):
 @app.route('/')
 def index():
     return HTML_TEMPLATE
+
 
 @app.route('/api/analyze')
 def api_analyze():
@@ -456,7 +459,7 @@ def api_analyze():
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # 🚨 [2단계 친구분 최적화 로직 반영]: 건축면적(지붕)이 1㎡ 미만인 순수 나대지일 때 VWorld 연속지적도 다이렉트 area 파싱
+                # 🚨 [2단계 친구분 필터 완벽 이식] 지붕 면적이 1㎡ 미만인 순수 나대지일 때 연속지적도 다이렉트 area 추출
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -467,12 +470,6 @@ def api_analyze():
                     
                     try:
                         v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
-                        
-                        # 터미널 디버깅 로그 추가
-                        print("="*50)
-                        print(f"[나대지 연속지적도 조회] PNU: {pnu}")
-                        print(f"응답 코드: {v_res.status_code}")
-                        
                         if v_res.status_code == 200:
                             v_json = v_res.json()
                             features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
@@ -480,7 +477,7 @@ def api_analyze():
                             if features:
                                 props = features[0].get("properties", {})
                                 
-                                # 📌 불안정한 토지특성 API 대신 안정적인 연속지적도의 area 필드를 그대로 토지면적으로 대체!
+                                # 📌 친구분의 특급 솔루션 반영: 연속지적도 area 필드를 바로 토지면적으로 매칭!
                                 if props.get("area"):
                                     p_val = float(props.get("area"))
                                     
@@ -488,13 +485,10 @@ def api_analyze():
                                 purps = props.get("jibun", "순수 나대지") + " (지적)"
                                 source_api = "VWorld 연속지적도(면적 연동)"
                                 item_count = 1
-                            else:
-                                print("➔ [알림] 해당 PNU의 지적도 피처가 존재하지 않습니다.")
-                        print("="*50)
                     except Exception as ve:
                         print(f"Cadastral Track Error: {ve}")
 
-                # 최종 데이터 마샬링 후 전송
+                # 최종 데이터 포장 반환 완료
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
