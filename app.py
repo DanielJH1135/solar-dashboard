@@ -10,6 +10,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# 변수 바인딩 확실하게 선언
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
@@ -483,7 +484,7 @@ def api_analyze():
                     except Exception as e:
                         print(f"Land Characteristics API Error: {e}")
 
-                # 최종 결과 처리 바인딩 후 리턴 완료
+                # 최종 결과 처리 바인딩 및 정상 리턴 마감 처리 완료
                 if item_count > 0 or p_val > 0 or a_val > 0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
