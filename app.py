@@ -371,14 +371,13 @@ def parse_building_xml_advanced(xml_text):
 
 @app.route('/api/analyze')
 def api_analyze():
-    addr = request.args.get('address', '')
-    
     out_data = {
         "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
         "vworld_jiga": 0, "main_purps": "-", "app_prvl_date": "-", "source_api": "나대지 (정보없음)",
-        "pnu": "-", "error_msg": ""
+        "pnu": "-", "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
     }
     
+    addr = request.args.get('address', '')
     if not addr:
         return jsonify(out_data)
 
@@ -408,6 +407,10 @@ def api_analyze():
                 
                 pnu = f"{sigungu_cd}{bjdong_cd}{pnu_land_type}{bun}{ji}"
                 out_data["pnu"] = pnu
+                out_data["sigungu_cd"] = sigungu_cd
+                out_data["bjdong_cd"] = bjdong_cd
+                out_data["bun"] = bun
+                out_data["ji"] = ji
 
                 domain_clean = VWORLD_DOMAIN.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
                 s = requests.Session()
@@ -443,7 +446,7 @@ def api_analyze():
                             if item_count > 0 and a_val > 0:
                                 source_api = "국토부 층별개요부"
 
-                # 🚨 [4단계] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 및 토지특성 자동 구동
+                # [4단계] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 및 토지특성 자동 구동
                 if a_val == 0.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -480,7 +483,7 @@ def api_analyze():
                     except Exception as e:
                         print(f"Land Characteristics API Error: {e}")
 
-                # 🚨 끊겼던 최종 가공 및 정상 반환 처리 완료
+                # 최종 결과 처리 바인딩 후 리턴 완료
                 if item_count > 0 or p_val > 0 or a_val > 0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
