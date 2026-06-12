@@ -66,22 +66,33 @@ HTML_TEMPLATE = """
                     <span id="targetJibun" class="text-xs font-mono text-gray-300">-</span>
                 </div>
                 
-                <div class="grid grid-cols-3 gap-2 text-center mb-3">
-                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block mb-1">대지 면적</span>
-                        <span id="bdPlatArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
+                <div class="grid grid-cols-2 gap-3 text-center mb-3">
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 border-l-4 border-l-emerald-400">
+                        <span class="text-[11px] text-emerald-400 block font-bold mb-1">건축 면적 (지붕평수용)</span>
+                        <span id="bdArchArea" class="text-lg font-black text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
                     </div>
-                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block mb-1">건축 면적</span>
-                        <span id="bdArchArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
-                    </div>
-                    <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block mb-1">건물 연면적</span>
-                        <span id="bdTotArea" class="text-xs font-bold text-white">0.00</span> <span class="text-[9px] text-gray-400">㎡</span>
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 border-l-4 border-l-blue-400">
+                        <span class="text-[11px] text-blue-400 block font-bold mb-1">가용 마당 면적 (대지-건축)</span>
+                        <span id="bdYardArea" class="text-lg font-black text-white">0.00</span> <span class="text-xs text-gray-400">㎡</span>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 text-center">
+                <div class="grid grid-cols-3 gap-2 text-center text-gray-400 text-xs">
+                    <div class="bg-gray-950/50 p-2 rounded-lg border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block">총 대지면적</span>
+                        <span id="bdPlatArea" class="font-bold text-gray-300">0.00</span> ㎡
+                    </div>
+                    <div class="bg-gray-950/50 p-2 rounded-lg border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block">참고용 연면적</span>
+                        <span id="bdTotArea" class="font-bold text-gray-300">0.00</span> ㎡
+                    </div>
+                    <div class="bg-gray-950/50 p-2 rounded-lg border border-gray-850">
+                        <span class="text-[10px] text-gray-500 block">데이터 소스</span>
+                        <span id="bdSourceInfo" class="font-bold text-amber-400">-</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-center mt-3">
                     <div class="bg-gray-950 p-2 rounded-xl border border-gray-850">
                         <span class="text-[10px] text-gray-500 block mb-0.5">建物 주용도</span>
                         <span id="bdMainPurps" class="text-xs font-bold text-amber-400">-</span>
@@ -108,19 +119,20 @@ HTML_TEMPLATE = """
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
+                    
                     <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500 mb-1">
-                            <span class="text-[10px] text-gray-400 font-medium">대지(마당)</span>
+                            <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
+                            <span class="text-[10px] text-gray-400 font-medium">건물 지붕 (추천)</span>
                         </label>
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="roof" onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
-                            <span class="text-[10px] text-gray-400 font-medium">건물 지붕</span>
+                            <input type="radio" name="calcMode" value="land" onchange="switchMode('land')" class="accent-blue-500 mb-1">
+                            <span class="text-[10px] text-gray-400 font-medium">대지(마당) 가용분</span>
                         </label>
                     </div>
                     
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex items-center justify-between">
-                        <span class="text-xs text-gray-500" id="inputLabel">마당 가용 면적 입력 (㎡)</span>
+                        <span class="text-xs text-gray-500" id="inputLabel">지붕 가용 면적 입력 (㎡)</span>
                         <input type="number" id="customArea" oninput="calculateValues()" class="w-32 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
                     </div>
 
@@ -186,7 +198,7 @@ HTML_TEMPLATE = """
                 <div id="loadingMsg" class="absolute inset-0 bg-gray-900/80 z-10 flex items-center justify-center hidden rounded-xl">
                     <div class="text-emerald-400 font-bold flex flex-col items-center">
                         <i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i>
-                        <span>국토부 건축물대장 정보 연동 동기화 중...</span>
+                        <span>국토부 건축물대장 및 층별개요 실시간 연동 동기화 중...</span>
                     </div>
                 </div>
             </div>
@@ -271,18 +283,22 @@ HTML_TEMPLATE = """
                         document.getElementById('bdPlatArea').innerText = rawPlatArea.toLocaleString();
                         document.getElementById('bdArchArea').innerText = rawArchArea.toLocaleString();
                         document.getElementById('bdTotArea').innerText = rawTotArea.toLocaleString();
+                        document.getElementById('bdYardArea').innerText = (rawPlatArea - rawArchArea > 0 ? (rawPlatArea - rawArchArea) : 0.0).toLocaleString();
                         document.getElementById('bdMainPurps').innerText = data.main_purps;
                         document.getElementById('bdAppPrvlDate').innerText = data.app_prvl_date;
+                        document.getElementById('bdSourceInfo').innerText = data.source_api;
                     } else {
                         rawPlatArea = 0.0;
                         rawArchArea = 0.0;
                         rawTotArea = 0.0;
-                        document.getElementById('targetJibun').innerText = data.error_msg ? `대장조회실패: ${data.error_msg}` : "건축물 정보 없음";
+                        document.getElementById('targetJibun').innerText = data.error_msg ? `조회 실패: ${data.error_msg}` : "건축물 정보 없음 (나대지)";
                         document.getElementById('bdPlatArea').innerText = "0";
                         document.getElementById('bdArchArea').innerText = "0";
                         document.getElementById('bdTotArea').innerText = "0";
+                        document.getElementById('bdYardArea').innerText = "0";
                         document.getElementById('bdMainPurps').innerText = "-";
                         document.getElementById('bdAppPrvlDate').innerText = "-";
+                        document.getElementById('bdSourceInfo').innerText = "실패";
                     }
 
                     switchMode(document.querySelector('input[name="calcMode"]:checked').value);
@@ -338,19 +354,25 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# 공통 XML 파싱 함수 (친구분이 지적해준 네임스페이스 무력화 파싱 빌드 처리)
-def parse_building_xml(xml_text):
+# 친구분 조언 연산 반영: 네임스페이스 완전 청소 및 다동 건물 필터링 파서
+def parse_building_xml_advanced(xml_text):
     try:
         root = ET.fromstring(xml_text.encode('utf-8'))
     except Exception:
         root = ET.fromstring(xml_text.replace('xmlns=', 'xmlIgnore=').encode('utf-8'))
     
     items = root.findall('.//item')
+    if len(items) == 0:
+        return 0.0, 0.0, 0.0, "-", "-", 0
+        
     plat_out, arch_out, tot_out = 0.0, 0.0, 0.0
     purps, dates = [], []
     
+    # 지번에 동이 여러 개일 때 메인 캐파 추출용 구조
     for item in items:
         p_val, a_val, t_val = 0.0, 0.0, 0.0
+        is_sub_dong = False # 부속동, 창고, 경비실 필터링용 변수
+        
         for child in item:
             tag_local = child.tag.split('}')[-1]
             if tag_local == 'platArea':
@@ -359,16 +381,25 @@ def parse_building_xml(xml_text):
                 a_val = float(child.text) if child.text else 0.0
             elif tag_local == 'totArea':
                 t_val = float(child.text) if child.text else 0.0
-            elif tag_local == 'mainPurpsCdNm' and child.text:
+            elif tag_local in ['mainPurpsCdNm', 'flrPurpsCdNm'] and child.text:
                 if child.text not in purps: purps.append(child.text)
             elif tag_local == 'useAprvDate' and child.text:
                 if child.text not in dates: dates.append(child.text)
-        
+            elif tag_local == 'mainAtchGbCdNm' and child.text and '부속' in child.text:
+                is_sub_dong = True # 부속 건물은 합산에서 제외하거나 가중치 하향 방어
+
         if p_val > plat_out: plat_out = p_val
-        arch_out += a_val
-        tot_out += t_val
         
-    return plat_out, arch_out, tot_out, ", ".join(purps), ", ".join(dates)
+        # 다동 건물 연면적 뻥튀기 무력화 (너무 작은 부속동이나 창고 면적 과지정 방어)
+        if not is_sub_dong or len(items) == 1:
+            arch_out += a_val
+            tot_out += t_val
+        else:
+            # 부속동이더라도 지붕 면적(archArea)의 30%만 보수적으로 잡거나 연면적만 가산
+            arch_out += (a_val * 0.2)
+            tot_out += t_val
+            
+    return plat_out, arch_out, tot_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
 
 @app.route('/api/analyze')
 def api_analyze():
@@ -376,7 +407,7 @@ def api_analyze():
     
     out_data = {
         "building_success": False, "plat_area": 0.0, "arch_area": 0.0, "tot_area": 0.0,
-        "main_purps": "-", "app_prvl_date": "-",
+        "main_purps": "-", "app_prvl_date": "-", "source_api": "-",
         "sigungu_cd": "", "bjdong_cd": "", "bun": "", "ji": "", "error_msg": ""
     }
     
@@ -411,51 +442,62 @@ def api_analyze():
                 out_data["bun"] = bun
                 out_data["ji"] = ji
 
+                # 🚨 [문제 5번 피드백 반영]: 지번 매칭 미스 즉시 해결용 터미널 로그 출력 고정
+                print("="*60)
+                print(f"[검색요청 주소]: {addr}")
+                print(f"➔ 카카오 분해 주소 인자값 -> 법정동코드 분할: {sigungu_cd} {bjdong_cd} | 번지 조립: {bun}-{ji}")
+                print("="*60)
+
                 if DATA_GO_KR_KEY:
                     s = requests.Session()
+                    base_url = "https://apis.data.go.kr/1613000/BldRgstHubService"
                     
-                    # 🚨 [단계 1] 일반 표제부 API 호출
-                    title_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-                    raw_title_url = f"{title_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                    
-                    res = s.get(raw_title_url, timeout=5)
-                    
-                    print("="*50)
-                    print(f"[1차 일반 표제부 호출 URL]: {raw_title_url}")
-                    
-                    p_val, a_val, t_val, purps, dates = 0.0, 0.0, 0.0, "-", "-"
-                    
-                    if res.status_code == 200 and ("archArea" in res.text or "archarea" in res.text):
-                        p_val, a_val, t_val, purps, dates = parse_building_xml(res.text)
-                    
-                    # 🚨 [단계 2] 일반 표제부에 데이터가 없다면, 동일한 인증키로 총괄 표제부(getBrRecapTitleInfo)를 2차로 자동 사격!
-                    if p_val == 0.0 and a_val == 0.0 and t_val == 0.0:
-                        print("➔ [알림] 일반 표제부 면적 데이터 부재. 2차 총괄 표제부 연동 기동.")
-                        recap_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"
-                        raw_recap_url = f"{recap_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                        
-                        res_recap = s.get(raw_recap_url, timeout=5)
-                        print(f"[2차 총괄 표제부 호출 URL]: {raw_recap_url}")
-                        
-                        if res_recap.status_code == 200 and ("archArea" in res_recap.text or "archarea" in res_recap.text):
-                            p_val, a_val, t_val, purps, dates = parse_building_xml(res_recap.text)
-                    
-                    print(f"[최종 추출 결과] 대지: {p_val} | 건축: {a_val} | 연면적: {t_val}")
-                    print("="*50)
+                    p_val, a_val, t_val, purps, dates, item_count = 0.0, 0.0, 0.0, "-", "-", 0
+                    source_api = "-"
 
-                    if p_val > 0 or a_val > 0 or t_val > 0:
+                    # 1순위 타격: 일반 표제부 조회 (getBrTitleInfo)
+                    url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                    res_1 = s.get(url_1, timeout=5)
+                    
+                    if res_1.status_code == 200:
+                        # [문제 4번 피드백 반영]: 글자 검색 대신 파싱된 item 개수로 조건 탐색 체인지
+                        p_val, a_val, t_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
+                        if item_count > 0:
+                            source_api = "일반 표제부"
+
+                    # 2순위 사격 (우회): 데이터가 없으면 총괄 표제부 연동 (getBrRecapTitleInfo)
+                    if item_count == 0 or (p_val == 0.0 and a_val == 0.0):
+                        url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        res_2 = s.get(url_2, timeout=5)
+                        if res_2.status_code == 200:
+                            p_val, a_val, t_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
+                            if item_count > 0:
+                                source_api = "총괄 표제부"
+
+                    # 🚨 [문제 2번 피드백 반영] 3순위 최종 우회 사격: 공장/축사용 층별개요 API 추가 연동 (getBrFlrOulnInfo)
+                    if item_count == 0 or (p_val == 0.0 and a_val == 0.0):
+                        url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        res_3 = s.get(url_3, timeout=5)
+                        if res_3.status_code == 200:
+                            p_val, a_val, t_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
+                            if item_count > 0:
+                                source_api = "층별 개요부"
+
+                    # 최종 패키징 바인딩
+                    if item_count > 0 and (p_val > 0 or a_val > 0):
                         out_data["building_success"] = True
                         out_data["plat_area"] = p_val
                         out_data["arch_area"] = a_val
                         out_data["tot_area"] = t_val
-                        out_data["main_purps"] = purps if purps else "-"
+                        out_data["main_purps"] = purps if purps else "공장/창고 구조물"
                         out_data["app_prvl_date"] = dates if dates else "-"
+                        out_data["source_api"] = source_api
                     else:
-                        out_data["error_msg"] = "일반 및 총괄대장에 등록된 면적이 확인되지 않습니다."
+                        out_data["error_msg"] = "3단계 통합조회 실패 (나대지 혹은 번지 불일치)"
 
     except Exception as e:
         out_data["error_msg"] = str(e)
-        print(f"System Error: {e}")
+        print(f"Critical System Thread Error: {e}")
 
     return jsonify(out_data)
 
