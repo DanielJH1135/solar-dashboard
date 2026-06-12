@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify
 import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
@@ -10,7 +10,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# 환경변수 안전 바인딩
+# 환경변수 바인딩
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
@@ -86,7 +86,7 @@ HTML_TEMPLATE = """
 
                 <div class="grid grid-cols-3 gap-2 text-center text-gray-400 text-xs">
                     <div class="bg-gray-950/50 p-2 rounded-lg border border-gray-850">
-                        <span class="text-[10px] text-gray-500 block">건물 주용도</span>
+                        <span class="text-[10px] text-gray-500 block">토지/건물 용도</span>
                         <span id="bdMainPurps" class="font-bold text-amber-400 text-[11px]">-</span>
                     </div>
                     <div class="bg-gray-950/50 p-2 rounded-lg border border-gray-850">
@@ -370,7 +370,6 @@ def parse_building_xml_advanced(xml_text):
     return plat_out, arch_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
 
 
-# 🚨 [Vercel 404 차단기] 루트 디렉토리 진입 시 템플릿 스트링 대신 정적 텍스트로 즉시 리턴
 @app.route('/')
 def index():
     return HTML_TEMPLATE
@@ -425,42 +424,28 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # [1단계] 일반 표제부 사격
+                # 1. 국토교통부 건축물대장 데이터 시도
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                    res_1 = s.get(url_1, timeout=5)
-                    if res_1.status_code == 200:
-                        p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
-                        if item_count > 0 and a_val > 0:
-                            source_api = "국토부 일반표제부"
-
-                    # [2단계] 데이터 미비 시 총괄 표제부 연동
-                    if item_count == 0 or a_val == 0.0:
-                        url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                        res_2 = s.get(url_2, timeout=5)
-                        if res_2.status_code == 200:
-                            p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
+                    try:
+                        res_1 = s.get(url_1, timeout=5)
+                        if res_1.status_code == 200:
+                            p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
                             if item_count > 0 and a_val > 0:
-                                source_api = "국토부 총괄표제부"
+                                source_api = "국토부 일반표제부"
+                    except Exception:
+                        pass
 
-                    # [3단계] 데이터 미비 시 층별 개요 연동
-                    if item_count == 0 or a_val == 0.0:
-                        url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                        res_3 = s.get(url_3, timeout=5)
-                        if res_3.status_code == 200:
-                            p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
-                            if item_count > 0 and a_val > 0:
-                                source_api = "국토부 층별개요부"
-
-                # [4단계] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 및 토지특성 자동 구동
+                # 2. 순수 나대지(a_val == 0)일 때 브이월드 데이터 강제 주입 로직 고도화
                 if a_val == 0.0 and VWORLD_API_KEY:
+                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
+                    
+                    # 공시지가 가져오기
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
                         "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
                         "attrFilter": f"pnu:=:{pnu}", "key": VWORLD_API_KEY, "domain": domain_clean
                     }
-                    v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
-                    
                     try:
                         v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
                         if v_res.status_code == 200:
@@ -469,9 +454,10 @@ def api_analyze():
                             if features:
                                 props = features[0].get("properties", {})
                                 out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
-                    except Exception as e:
-                        print(f"Cadastral Fetch Error: {e}")
+                    except Exception:
+                        pass
 
+                    # 🚨 [해결 지점] 토지특성조회 API 호출 및 면적 필드(lndpclAr -> plat_area) 결합 복원
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {"key": VWORLD_API_KEY, "domain": domain_clean, "pnu": pnu, "format": "json"}
                     
@@ -479,17 +465,22 @@ def api_analyze():
                         char_res = requests.get(char_url, params=char_params, headers=v_headers, timeout=5)
                         if char_res.status_code == 200:
                             char_json = char_res.json()
-                            char_list = char_json.get("landCharacteristicss", {}).get("field", [])
+                            char_list = char_json.get("landCharacteristics", {}).get("field", [])
+                            if not char_list:
+                                # VWorld API의 구조적 노이즈(s 누락/추가) 방어 코드
+                                char_list = char_json.get("landCharacteristicss", {}).get("field", [])
+                                
                             if char_list:
                                 props = char_list[0]
-                                p_val = float(props.get("lndpclAr")) if props.get("lndpclAr") else 0.0
+                                # 브이월드가 주는 토지면적(lndpclAr)을 추출하여 p_val에 강제 주입
+                                p_val = float(props.get("lndpclAr", 0.0)) if props.get("lndpclAr") else 0.0
                                 purps = props.get("lndcgrCodeNm", "토지 나대지")
                                 source_api = "브이월드 연속지적도"
                                 item_count = 1
-                    except Exception as e:
-                        print(f"Land Characteristics API Error: {e}")
+                    except Exception:
+                        pass
 
-                # 최종 가공 리턴 완전 결합 마감
+                # 최종 데이터 마샬링 및 클라이언트 전송
                 if item_count > 0 or p_val > 0 or a_val > 0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -502,7 +493,6 @@ def api_analyze():
 
     except Exception as e:
         out_data["error_msg"] = str(e)
-        print(f"Critical Error: {e}")
 
     return jsonify(out_data)
 
