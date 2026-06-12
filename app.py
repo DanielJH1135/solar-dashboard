@@ -5,13 +5,14 @@ import xml.etree.ElementTree as ET
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
-# 1. [.env 로드]
+# 1. 환경변수 로드
 load_dotenv()
 
-# 2. [Vercel 최적화 진입점] 빌더가 최상위 레벨에서 즉시 app을 바인딩하도록 고정합니다.
+# 2. [Vercel 최상위 루트 고정 진입점] 
+# 파일명이 루트의 app.py이므로 빌더가 0.1초 만에 최상위 객체를 바인딩하도록 파일 전두엽에 배치합니다.
 app = Flask(__name__)
 
-# 3. [환경변수 및 None 안전 차폐] 문자열 치환 시 TypeError가 절대 나지 않도록 기본 공백 문자 처리를 강제합니다.
+# 3. 환경변수 안전 바인딩 차폐
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY", "")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY", "")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY", "")
@@ -60,7 +61,6 @@ def parse_building_xml_advanced(xml_text):
 
 @app.route('/')
 def index():
-    # KAKAO_JS_KEY가 변수 추적 과정에서 None으로 누락되었더라도 공백 문자로 안전하게 대조 파싱합니다.
     safe_js_key = str(KAKAO_JS_KEY) if KAKAO_JS_KEY else ""
     return HTML_TEMPLATE.replace("KAKAO_JS_KEY_PLACEHOLDER", safe_js_key)
 
@@ -79,7 +79,6 @@ def api_analyze():
 
     try:
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
-        # 친구분 피드백 반영: 전 통신구간 타임아웃 2초 슬림화 동기화
         k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=2)
         documents = k_res.json().get('documents', [])
         
@@ -116,7 +115,7 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # 1단계: 건축물대장 일반 표제부 호출 (타임아웃 2초 제한)
+                # 1단계: 건축물대장 호출
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
@@ -128,7 +127,6 @@ def api_analyze():
                     except Exception:
                         pass
 
-                    # 2단계: 데이터 미비 시 총괄 표제부 연동 (타임아웃 2초 제한)
                     if item_count == 0 or a_val == 0.0:
                         url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                         try:
@@ -140,7 +138,6 @@ def api_analyze():
                         except Exception:
                             pass
 
-                    # 3단계: 데이터 미비 시 층별 개요 연동 (타임아웃 2초 제한)
                     if item_count == 0 or a_val == 0.0:
                         url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                         try:
@@ -150,7 +147,7 @@ def api_analyze():
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # 4단계 나대지 우회 매킹: 건축면적 판단 범위를 1.0㎡ 미만으로 정교화하여 억까 방지
+                # 2단계 나대지 우회 매킹 (건축면적 1㎡ 미만 시 연속지적도 다이렉트 area 추출)
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -161,8 +158,17 @@ def api_analyze():
                     
                     try:
                         v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=2)
+                        
+                        # 🚨 [친구분 요청 디버깅용 print 출력 추가]
+                        print("=== VWORLD DEBUG LOG START ===")
+                        print("PNU:", pnu)
+                        print("VWORLD STATUS:", v_res.status_code)
+                        print("VWORLD RESPONSE TEXT:", v_res.text[:1000])
+                        
                         if v_res.status_code == 200:
                             v_json = v_res.json()
+                            print("VWORLD JSON OBJ:", v_json)
+                            
                             features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
                             if features:
                                 props = features[0].get("properties", {})
@@ -172,10 +178,14 @@ def api_analyze():
                                 purps = props.get("jibun", "순수 나대지") + " (지적)"
                                 source_api = "VWorld 연속지적도(면적 연동)"
                                 item_count = 1
-                    except Exception:
+                            else:
+                                out_data["error_msg"] = f"지적도 조회 성공했으나 데이터 부재. 상태: {v_json.get('response', {}).get('status')}"
+                        print("=== VWORLD DEBUG LOG END ===")
+                    except Exception as ve:
+                        print("VWORLD API EXCEPTION:", str(ve))
                         pass
 
-                # 데이터 취합 동기화
+                # 최종 결과 반환
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -184,7 +194,8 @@ def api_analyze():
                     out_data["app_prvl_date"] = dates if dates else "-"
                     out_data["source_api"] = source_api
                 else:
-                    out_data["error_msg"] = "공적장부 조회 데이터 없음"
+                    if not out_data["error_msg"]:
+                        out_data["error_msg"] = "공적장부 조회 데이터 없음"
 
     except Exception as e:
         out_data["error_msg"] = str(e)
@@ -192,7 +203,7 @@ def api_analyze():
     return jsonify(out_data)
 
 
-# 🚨 거대 HTML 문자열 레이어 격리 완료
+# 최하단 HTML 정적 레이어 격리
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -233,9 +244,7 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
         <div class="lg:col-span-5 flex flex-col gap-4">
-            
             <div class="bg-gray-900 border border-gray-800 p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-building-shield"></i> 국토부 & VWorld 통합 공적 장부
@@ -374,7 +383,6 @@ HTML_TEMPLATE = """
                 </div>
             </div>
         </div>
-
     </div>
 
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JS_KEY_PLACEHOLDER&libraries=services"></script>
@@ -386,14 +394,11 @@ HTML_TEMPLATE = """
         document.addEventListener("DOMContentLoaded", function() {
             const mapContainer = document.getElementById('map');
             const defaultPos = new kakao.maps.LatLng(35.8596, 128.6254); 
-            
             map = new kakao.maps.Map(mapContainer, { center: defaultPos, level: 2 });
             map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); 
-            
             ps = new kakao.maps.services.Places(); 
             geocoder = new kakao.maps.services.Geocoder();
             marker = new kakao.maps.Marker({ map: map, position: defaultPos });
-            
             startAnalysis();
         });
 
@@ -413,7 +418,6 @@ HTML_TEMPLATE = """
         function startAnalysis() {
             const addr = document.getElementById('addressInput').value;
             if(!addr) return;
-            
             document.getElementById('loadingMsg').classList.remove('hidden');
 
             ps.keywordSearch(addr, function(data, status) {
@@ -443,7 +447,6 @@ HTML_TEMPLATE = """
                 .then(res => res.json())
                 .then(data => {
                     document.getElementById('loadingMsg').classList.add('hidden');
-                    
                     rawPlatArea = data.plat_area ? parseFloat(data.plat_area) : 0.0;
                     rawArchArea = data.arch_area ? parseFloat(data.arch_area) : 0.0;
                     
@@ -457,7 +460,6 @@ HTML_TEMPLATE = """
 
                     let radioToSelect = (rawArchArea < 1.0 && rawPlatArea > 0) ? "land" : "roof";
                     document.querySelector(`input[name="calcMode"][value="${radioToSelect}"]`).checked = true;
-
                     switchMode(radioToSelect);
                 }).catch(err => {
                     console.error(err);
@@ -468,7 +470,6 @@ HTML_TEMPLATE = """
         function calculateValues() {
             let currentArea = parseFloat(document.getElementById('customArea').value);
             if(isNaN(currentArea) || currentArea <= 0) currentArea = 0.0;
-            
             const pyeong = currentArea / 3.3;
             const kw = pyeong / 3.0;
             
