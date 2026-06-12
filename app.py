@@ -5,17 +5,17 @@ import xml.etree.ElementTree as ET
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
-# 1. 환경변수 메모리 로드
+# 1. [.env 로드]
 load_dotenv()
 
-# 2. Vercel 빌더가 즉시 인식할 수 있도록 Flask 인스턴스를 최상단에 단독 선언합니다.
+# 2. [Vercel 최적화 진입점] 빌더가 최상위 레벨에서 즉시 app을 바인딩하도록 고정합니다.
 app = Flask(__name__)
 
-# 3. 환경변수 안전 바인딩
-DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
-KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
-KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
-VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
+# 3. [환경변수 및 None 안전 차폐] 문자열 치환 시 TypeError가 절대 나지 않도록 기본 공백 문자 처리를 강제합니다.
+DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY", "")
+KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY", "")
+KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY", "")
+VWORLD_API_KEY = os.getenv("VWORLD_API_KEY", "")
 VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
 
@@ -60,7 +60,9 @@ def parse_building_xml_advanced(xml_text):
 
 @app.route('/')
 def index():
-    return HTML_TEMPLATE
+    # KAKAO_JS_KEY가 변수 추적 과정에서 None으로 누락되었더라도 공백 문자로 안전하게 대조 파싱합니다.
+    safe_js_key = str(KAKAO_JS_KEY) if KAKAO_JS_KEY else ""
+    return HTML_TEMPLATE.replace("KAKAO_JS_KEY_PLACEHOLDER", safe_js_key)
 
 
 @app.route('/api/analyze')
@@ -77,7 +79,8 @@ def api_analyze():
 
     try:
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
-        k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=4)
+        # 친구분 피드백 반영: 전 통신구간 타임아웃 2초 슬림화 동기화
+        k_res = requests.get("https://dapi.kakao.com/v2/local/search/address.json", headers=headers, params={"query": addr}, timeout=2)
         documents = k_res.json().get('documents', [])
         
         if documents:
@@ -113,11 +116,11 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # [1단계] 건축물대장 3중 방어 호출
+                # 1단계: 건축물대장 일반 표제부 호출 (타임아웃 2초 제한)
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
-                        res_1 = s.get(url_1, timeout=5)
+                        res_1 = s.get(url_1, timeout=2)
                         if res_1.status_code == 200:
                             p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_1.text)
                             if item_count > 0 and a_val > 0.0:
@@ -125,10 +128,11 @@ def api_analyze():
                     except Exception:
                         pass
 
+                    # 2단계: 데이터 미비 시 총괄 표제부 연동 (타임아웃 2초 제한)
                     if item_count == 0 or a_val == 0.0:
                         url_2 = f"{base_url}/getBrRecapTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                         try:
-                            res_2 = s.get(url_2, timeout=5)
+                            res_2 = s.get(url_2, timeout=2)
                             if res_2.status_code == 200:
                                 p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_2.text)
                                 if item_count > 0 and a_val > 0.0:
@@ -136,16 +140,17 @@ def api_analyze():
                         except Exception:
                             pass
 
+                    # 3단계: 데이터 미비 시 층별 개요 연동 (타임아웃 2초 제한)
                     if item_count == 0 or a_val == 0.0:
                         url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                         try:
-                            res_3 = s.get(url_3, timeout=5)
+                            res_3 = s.get(url_3, timeout=2)
                             if res_3.status_code == 200:
                                 p_val, a_val, purps, dates, item_count = parse_building_xml_advanced(res_3.text)
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # [2단계 친구분 필터 이식] 나대지일 때 연속지적도 area 추출
+                # 4단계 나대지 우회 매킹: 건축면적 판단 범위를 1.0㎡ 미만으로 정교화하여 억까 방지
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -155,24 +160,22 @@ def api_analyze():
                     v_headers = {"User-Agent": "Mozilla/5.0", "Referer": f"https://{domain_clean}"}
                     
                     try:
-                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=5)
+                        v_res = requests.get("https://api.vworld.kr/req/data", params=v_params, headers=v_headers, timeout=2)
                         if v_res.status_code == 200:
                             v_json = v_res.json()
                             features = v_json.get("response", {}).get("result", {}).get("featureCollection", {}).get("features", [])
-                            
                             if features:
                                 props = features[0].get("properties", {})
                                 if props.get("area"):
                                     p_val = float(props.get("area"))
-                                    
                                 out_data["vworld_jiga"] = int(props.get("jiga", 0)) if props.get("jiga") else 0
                                 purps = props.get("jibun", "순수 나대지") + " (지적)"
                                 source_api = "VWorld 연속지적도(면적 연동)"
                                 item_count = 1
-                    except Exception as ve:
-                        print(f"Cadastral Track Error: {ve}")
+                    except Exception:
+                        pass
 
-                # 최종 결과 반환
+                # 데이터 취합 동기화
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -189,7 +192,7 @@ def api_analyze():
     return jsonify(out_data)
 
 
-# 🚨 [하단 완전 격리] 실행 로직이 다 끝난 후 문자열을 배치해 Vercel의 눈을 흐리지 않게 제어합니다.
+# 🚨 거대 HTML 문자열 레이어 격리 완료
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -233,7 +236,7 @@ HTML_TEMPLATE = """
         
         <div class="lg:col-span-5 flex flex-col gap-4">
             
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl">
+            <div class="bg-gray-900 border border-gray-800 p-5 shadow-xl">
                 <h3 class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-building-shield"></i> 국토부 & VWorld 통합 공적 장부
                 </h3>
@@ -282,7 +285,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
@@ -290,11 +293,11 @@ HTML_TEMPLATE = """
                 <div class="p-5 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
+                            <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')">
                             <span class="text-[10px] text-gray-400 font-medium">건물 지붕 (축사/공장)</span>
                         </label>
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="land" onchange="switchMode('land')" class="accent-blue-500 mb-1">
+                            <input type="radio" name="calcMode" value="land" onchange="switchMode('land')">
                             <span class="text-[10px] text-gray-400 font-medium">대지(나대지/마당)</span>
                         </label>
                     </div>
@@ -374,7 +377,7 @@ HTML_TEMPLATE = """
 
     </div>
 
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=""" + (KAKAO_JS_KEY if KAKAO_JS_KEY else "") + """&libraries=services"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JS_KEY_PLACEHOLDER&libraries=services"></script>
     <script>
         let map, marker, ps, geocoder;
         let rawPlatArea = 0;
