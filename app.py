@@ -108,7 +108,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
@@ -279,7 +279,6 @@ HTML_TEMPLATE = """
                     document.getElementById('bdAppPrvlDate').innerText = data.app_prvl_date;
                     document.getElementById('bdSourceInfo').innerText = data.source_api;
 
-                    // 💡 나대지(건축면적이 0)인 경우 자동으로 라디오 버튼을 '대지(나대지)'로 선택 전환
                     let radioToSelect = (rawArchArea === 0 && rawPlatArea > 0) ? "land" : "roof";
                     document.querySelector(`input[name="calcMode"][value="${radioToSelect}"]`).checked = true;
 
@@ -436,7 +435,7 @@ def api_analyze():
                             if item_count > 0 and a_val > 0:
                                 source_api = "국토부 총괄표제부"
 
-                    # [3단계] 데이터 미비 시 층별 개요 연동 (공장/창고 방어)
+                    # [3단계] 데이터 미비 시 층별 개요 연동
                     if item_count == 0 or a_val == 0.0:
                         url_3 = f"{base_url}/getBrFlrOulnInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                         res_3 = s.get(url_3, timeout=5)
@@ -445,9 +444,9 @@ def api_analyze():
                             if item_count > 0 and a_val > 0:
                                 source_api = "국토부 층별개요부"
 
-                # 🚨 [4단계] 건축물이 아예 없는 "순수 나대지"일 때 연속지적도 및 토지특성 자동 구동!!
+                # 🚨 [4단계 우회 결합] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 자동 호출
                 if a_val == 0.0 and VWORLD_API_KEY:
-                    # 연속지적도 API에서 공시지가(`jiga`) 추출
+                    # 연속지적도 API에서 공시지가(jiga) 파싱
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
                         "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
@@ -466,7 +465,7 @@ def api_analyze():
                     except Exception as e:
                         print(f"Cadastral Fetch Error: {e}")
 
-                    # 친구분 피드백 반영: 연속지적도 속성조회 API로 면적 및 지목 긁어오기
+                    # 연속지적도 속성조회 API로 토지 면적 및 법정 지목 매핑
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {"key": VWORLD_API_KEY, "domain": domain_clean, "pnu": pnu, "format": "json"}
                     
@@ -484,5 +483,22 @@ def api_analyze():
                     except Exception as e:
                         print(f"Land Characteristics API Error: {e}")
 
-                # 최종 데이터 포장 반환
-                if item_count >
+                # 최종 결과 리턴 셋업
+                if item_count > 0 or p_val > 0 or a_val > 0:
+                    out_data["building_success"] = True
+                    out_data["plat_area"] = p_val
+                    out_data["arch_area"] = a_val
+                    out_data["main_purps"] = purps if purps else "-"
+                    out_data["app_prvl_date"] = dates if dates else "-"
+                    out_data["source_api"] = source_api
+                else:
+                    out_data["error_msg"] = "데이터 부재 (수동 입력 필요)"
+
+    except Exception as e:
+        out_data["error_msg"] = str(e)
+        print(f"Critical Error: {e}")
+
+    return jsonify(out_data)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
