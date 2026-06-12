@@ -108,7 +108,6 @@ HTML_TEMPLATE = """
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
-                    
                     <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
                             <input type="radio" name="calcMode" value="land" checked onchange="switchMode('land')" class="accent-blue-500 mb-1">
@@ -339,6 +338,38 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# 공통 XML 파싱 함수 (친구분이 지적해준 네임스페이스 무력화 파싱 빌드 처리)
+def parse_building_xml(xml_text):
+    try:
+        root = ET.fromstring(xml_text.encode('utf-8'))
+    except Exception:
+        root = ET.fromstring(xml_text.replace('xmlns=', 'xmlIgnore=').encode('utf-8'))
+    
+    items = root.findall('.//item')
+    plat_out, arch_out, tot_out = 0.0, 0.0, 0.0
+    purps, dates = [], []
+    
+    for item in items:
+        p_val, a_val, t_val = 0.0, 0.0, 0.0
+        for child in item:
+            tag_local = child.tag.split('}')[-1]
+            if tag_local == 'platArea':
+                p_val = float(child.text) if child.text else 0.0
+            elif tag_local == 'archArea':
+                a_val = float(child.text) if child.text else 0.0
+            elif tag_local == 'totArea':
+                t_val = float(child.text) if child.text else 0.0
+            elif tag_local == 'mainPurpsCdNm' and child.text:
+                if child.text not in purps: purps.append(child.text)
+            elif tag_local == 'useAprvDate' and child.text:
+                if child.text not in dates: dates.append(child.text)
+        
+        if p_val > plat_out: plat_out = p_val
+        arch_out += a_val
+        tot_out += t_val
+        
+    return plat_out, arch_out, tot_out, ", ".join(purps), ", ".join(dates)
+
 @app.route('/api/analyze')
 def api_analyze():
     addr = request.args.get('address', '')
@@ -381,79 +412,50 @@ def api_analyze():
                 out_data["ji"] = ji
 
                 if DATA_GO_KR_KEY:
-                    bld_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-                    raw_full_url = f"{bld_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
-                    
                     s = requests.Session()
-                    bld_res = s.get(raw_full_url, timeout=5)
+                    
+                    # 🚨 [단계 1] 일반 표제부 API 호출
+                    title_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
+                    raw_title_url = f"{title_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                    
+                    res = s.get(raw_title_url, timeout=5)
                     
                     print("="*50)
-                    print(f"주소: {addr}")
-                    print(f"sigungu: {sigungu_cd} | bjdong: {bjdong_cd} | bun: {bun} | ji: {ji}")
-                    print(f"요청 URL: {raw_full_url}")
-                    print(f"국토부 응답 원문 상태코드: {bld_res.status_code}")
-                    print(f"국토부 응답 원문 텍스트 (앞 3000자):\n{bld_res.text[:3000]}")
+                    print(f"[1차 일반 표제부 호출 URL]: {raw_title_url}")
+                    
+                    p_val, a_val, t_val, purps, dates = 0.0, 0.0, 0.0, "-", "-"
+                    
+                    if res.status_code == 200 and ("archArea" in res.text or "archarea" in res.text):
+                        p_val, a_val, t_val, purps, dates = parse_building_xml(res.text)
+                    
+                    # 🚨 [단계 2] 일반 표제부에 데이터가 없다면, 동일한 인증키로 총괄 표제부(getBrRecapTitleInfo)를 2차로 자동 사격!
+                    if p_val == 0.0 and a_val == 0.0 and t_val == 0.0:
+                        print("➔ [알림] 일반 표제부 면적 데이터 부재. 2차 총괄 표제부 연동 기동.")
+                        recap_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"
+                        raw_recap_url = f"{recap_url}?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
+                        
+                        res_recap = s.get(raw_recap_url, timeout=5)
+                        print(f"[2차 총괄 표제부 호출 URL]: {raw_recap_url}")
+                        
+                        if res_recap.status_code == 200 and ("archArea" in res_recap.text or "archarea" in res_recap.text):
+                            p_val, a_val, t_val, purps, dates = parse_building_xml(res_recap.text)
+                    
+                    print(f"[최종 추출 결과] 대지: {p_val} | 건축: {a_val} | 연면적: {t_val}")
                     print("="*50)
 
-                    if bld_res.status_code == 200:
-                        try:
-                            xml_clean = bld_res.text.encode('utf-8')
-                            root = ET.fromstring(xml_clean)
-                        except Exception as parse_err:
-                            xml_clean = bld_res.text.replace('xmlns=', 'xmlIgnore=').encode('utf-8')
-                            root = ET.fromstring(xml_clean)
-
-                        result_code = root.find('.//resultCode') or root.find('*/resultCode')
-                        if result_code is not None and result_code.text != "00":
-                            result_msg = root.find('.//resultMsg')
-                            out_data["error_msg"] = result_msg.text if result_msg is not None else "API 키 또는 기관 서버 오류"
-                            return jsonify(out_data)
-
-                        items = root.findall('.//item')
-                        
-                        total_plat = 0.0
-                        total_arch = 0.0
-                        total_tot = 0.0
-                        purps_list = []
-                        date_list = []
-
-                        for item in items:
-                            plat_val = 0.0
-                            arch_val = 0.0
-                            tot_val = 0.0
-                            
-                            for child in item:
-                                tag_local = child.tag.split('}')[-1] 
-                                if tag_local == 'platArea':
-                                    plat_val = float(child.text) if child.text else 0.0
-                                elif tag_local == 'archArea':
-                                    arch_val = float(child.text) if child.text else 0.0
-                                elif tag_local == 'totArea':
-                                    tot_val = float(child.text) if child.text else 0.0
-                                elif tag_local == 'mainPurpsCdNm' and child.text:
-                                    if child.text not in purps_list: purps_list.append(child.text)
-                                elif tag_local == 'useAprvDate' and child.text:
-                                    if child.text not in date_list: date_list.append(child.text)
-                            
-                            if plat_val > total_plat: total_plat = plat_val 
-                            total_arch += arch_val
-                            total_tot += tot_val
-
-                        if total_plat > 0 or total_arch > 0 or total_tot > 0:
-                            out_data["building_success"] = True
-                            out_data["plat_area"] = total_plat
-                            out_data["arch_area"] = total_arch
-                            out_data["tot_area"] = total_tot
-                            out_data["main_purps"] = ", ".join(purps_list) if purps_list else "-"
-                            out_data["app_prvl_date"] = ", ".join(date_list) if date_list else "-"
-                        else:
-                            out_data["error_msg"] = "해당 번지에 조회된 건축물 면적이 0입니다."
+                    if p_val > 0 or a_val > 0 or t_val > 0:
+                        out_data["building_success"] = True
+                        out_data["plat_area"] = p_val
+                        out_data["arch_area"] = a_val
+                        out_data["tot_area"] = t_val
+                        out_data["main_purps"] = purps if purps else "-"
+                        out_data["app_prvl_date"] = dates if dates else "-"
                     else:
-                        out_data["error_msg"] = f"국토부 응답 실패 ({bld_res.status_code})"
+                        out_data["error_msg"] = "일반 및 총괄대장에 등록된 면적이 확인되지 않습니다."
 
     except Exception as e:
         out_data["error_msg"] = str(e)
-        print(f"Critical Api System Error: {e}")
+        print(f"System Error: {e}")
 
     return jsonify(out_data)
 
