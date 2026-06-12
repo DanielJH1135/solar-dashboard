@@ -5,21 +5,21 @@ import xml.etree.ElementTree as ET
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
-# .env 환경변수 로드
+# 1. [.env 환경변수 로드] 가장 먼저 파일 시스템에서 환경변수를 메모리에 올립니다.
 load_dotenv()
 
-# 🚨 [1순위 고정] 파이썬 컴파일러가 가장 먼저 실행해야 하는 핵심 진입점 선언
-app = Flask(__name__)
-
-# 환경변수 안전 바인딩
+# 2. [모든 환경변수 선언 및 바인딩] 문자열 템플릿보다 무조건 먼저 선언되어야 에러가 안 납니다.
 DATA_GO_KR_KEY = os.getenv("DATA_GO_KR_KEY")
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY")
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 VWORLD_API_KEY = os.getenv("VWORLD_API_KEY")
 VWORLD_DOMAIN = os.getenv("VWORLD_DOMAIN", "solar-dashboard-daegu.vercel.app")
 
+# 3. [Flask 진입점 인스턴스 선언] Vercel이 0.1초 만에 낚아챌 수 있도록 최상층부 레벨에 배치합니다.
+app = Flask(__name__)
 
-# 🚨 [2순위 고정] 공통 헬퍼 함수
+
+# 4. [공통 헬퍼 파서 함수]
 def parse_building_xml_advanced(xml_text):
     try:
         root = ET.fromstring(xml_text.encode('utf-8'))
@@ -59,7 +59,7 @@ def parse_building_xml_advanced(xml_text):
     return plat_out, arch_out, ", ".join(purps[:3]), ", ".join(dates[:2]), len(items)
 
 
-# 🚨 [3순위 고정] 위에서 app 객체가 무조건 생성된 직후이므로 이제 정상 라우팅 연동 가능
+# 5. [라우터 핸들러 매핑] app 객체와 변수가 완벽히 잡힌 상태이므로 Vercel이 바로 경로를 매칭합니다.
 @app.route('/')
 def index():
     return HTML_TEMPLATE
@@ -115,7 +115,7 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # 1. 국토부 건축물대장 3중 필터 호출
+                # 1단계: 건축물대장 3중 필터 호출
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
@@ -147,7 +147,7 @@ def api_analyze():
                                 if item_count > 0 and a_val > 0.0:
                                     source_api = "국토부 층별개요부"
 
-                # 2. 친구분 필터 이식: 나대지일 때 연속지적도 다이렉트 area 추출
+                # 2단계 친구분 필터 이식: 나대지일 때 연속지적도 다이렉트 area 추출
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -174,7 +174,7 @@ def api_analyze():
                     except Exception as ve:
                         print(f"Cadastral Track Error: {ve}")
 
-                # 최종 데이터 마샬링 후 리턴
+                # 최종 데이터 마샬링 후 전송
                 if item_count > 0 or p_val > 0.0 or a_val > 0.0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
@@ -191,7 +191,8 @@ def api_analyze():
     return jsonify(out_data)
 
 
-# 🚨 [4순위 고정] 거대 HTML 데이터 레이어는 실행 흐름을 방해하지 못하게 소스코드 맨 밑바닥으로 완전히 내렸습니다.
+# 🚨 [6. 최하단 격리 조치] 
+# 변수 의존성이 완전히 끝난 가장 안전한 바닥 위치에 거대 HTML 레이어를 정의합니다.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -284,7 +285,7 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
@@ -292,11 +293,11 @@ HTML_TEMPLATE = """
                 <div class="p-5 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
+                            <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')", class="accent-emerald-400 mb-1">
                             <span class="text-[10px] text-gray-400 font-medium">건물 지붕 (축사/공장)</span>
                         </label>
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
-                            <input type="radio" name="calcMode" value="land" onchange="switchMode('land')" class="accent-blue-500 mb-1">
+                            <input type="radio" name="calcMode" value="land" onchange="switchMode('land')", class="accent-blue-500 mb-1">
                             <span class="text-[10px] text-gray-400 font-medium">대지(나대지/마당)</span>
                         </label>
                     </div>
