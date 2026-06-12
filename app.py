@@ -108,13 +108,12 @@ HTML_TEMPLATE = """
             <details class="bg-gray-900 border border-gray-800 rounded-2xl shadow-xl group" open>
                 <summary class="p-5 cursor-pointer flex justify-between items-center text-amber-400 font-bold text-sm select-none border-b border-gray-800/0 group-open:border-gray-800 transition-colors">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 
+                        <i class="fa-solid fa-calculator"></i> 간편 견적 시뮬레이터 (3평=1kW)
                     </div>
                     <i class="fa-solid fa-chevron-down transition-transform duration-300 group-open:rotate-180 text-gray-500"></i>
                 </summary>
                 
                 <div class="p-5 flex flex-col gap-4">
-                    
                     <div class="grid grid-cols-2 gap-2 bg-gray-950 p-1 rounded-xl border border-gray-850">
                         <label class="bg-gray-900 border border-gray-800 p-2 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-700 text-center">
                             <input type="radio" name="calcMode" value="roof" checked onchange="switchMode('roof')" class="accent-emerald-400 mb-1">
@@ -444,9 +443,8 @@ def api_analyze():
                             if item_count > 0 and a_val > 0:
                                 source_api = "국토부 층별개요부"
 
-                # 🚨 [4단계 우회 결합] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 자동 호출
+                # 🚨 [4단계] 건축물이 전혀 잡히지 않는 순수 나대지일 때 브이월드 연속지적도 및 토지특성 자동 구동
                 if a_val == 0.0 and VWORLD_API_KEY:
-                    # 연속지적도 API에서 공시지가(jiga) 파싱
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
                         "data": "LP_PA_CBND_BUBUN", "geometry": "false", "attribute": "true",
@@ -465,7 +463,6 @@ def api_analyze():
                     except Exception as e:
                         print(f"Cadastral Fetch Error: {e}")
 
-                    # 연속지적도 속성조회 API로 토지 면적 및 법정 지목 매핑
                     char_url = "https://api.vworld.kr/ned/data/getLandCharacteristics"
                     char_params = {"key": VWORLD_API_KEY, "domain": domain_clean, "pnu": pnu, "format": "json"}
                     
@@ -483,7 +480,7 @@ def api_analyze():
                     except Exception as e:
                         print(f"Land Characteristics API Error: {e}")
 
-                # 최종 결과 리턴 셋업
+                # 🚨 끊겼던 최종 가공 및 정상 반환 처리 완료
                 if item_count > 0 or p_val > 0 or a_val > 0:
                     out_data["building_success"] = True
                     out_data["plat_area"] = p_val
