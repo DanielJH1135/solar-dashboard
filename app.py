@@ -98,7 +98,6 @@ def api_analyze():
                 
                 full_jibun_name = jibun_info.get('address_name', '')
                 
-                # 산지 억까 교정 필터
                 if jibun_info.get('mountain_yn') == 'Y' or ' 산 ' in f" {full_jibun_name} ":
                     pnu_land_type = '2'
                     molit_plat_gb = '1'
@@ -120,7 +119,6 @@ def api_analyze():
                 p_val, a_val, purps, dates, item_count = 0.0, 0.0, "-", "-", 0
                 source_api = "-"
 
-                # 1단계: 건축물대장 분석
                 if DATA_GO_KR_KEY:
                     url_1 = f"{base_url}/getBrTitleInfo?serviceKey={DATA_GO_KR_KEY}&sigunguCd={sigungu_cd}&bjdongCd={bjdong_cd}&platGbCd={molit_plat_gb}&bun={bun}&ji={ji}&numOfRows=50&pageNo=1"
                     try:
@@ -143,7 +141,6 @@ def api_analyze():
                         except Exception:
                             pass
 
-                # 2단계: 나대지 VWorld 매핑
                 if a_val < 1.0 and VWORLD_API_KEY:
                     v_params = {
                         "service": "data", "version": "2.0", "request": "GetFeature", "format": "json",
@@ -206,7 +203,7 @@ HTML_TEMPLATE = """
             <h1 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-solar-panel text-emerald-400"></i> 대구지사 태양광 대시보드 시스템
             </h1>
-            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 (실전 평수 입력 버전)</p>
+            <p class="text-xs md:text-sm text-gray-400 mt-1">VWorld & 국토부 연동 (2.5평 실전 버전)</p>
         </div>
     </header>
 
@@ -355,7 +352,7 @@ HTML_TEMPLATE = """
                                 <span class="font-bold text-blue-400">0원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500" id="rentLabel1">초기 연 임대료</span>
+                                <span class="text-gray-500" id="rentLabel1">초기 연 임대료 (매년 지급)</span>
                                 <span class="font-bold text-white"><span id="rentAnnual1">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
@@ -363,13 +360,13 @@ HTML_TEMPLATE = """
                                 <span class="font-bold text-emerald-400"><span id="rentMonthly1">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500" id="rentLabel2">후기 연 임대료</span>
+                                <span class="text-gray-500" id="rentLabel2">후기 연 임대료 (매년 지급)</span>
                                 <span class="font-bold text-white"><span id="rentAnnual2">0</span> 원</span>
                             </div>
                             
                             <div id="promoPanel" class="flex justify-between items-center bg-gradient-to-r from-blue-950 to-slate-900 p-2.5 rounded border border-blue-800/40 text-xs mt-1 transition-all">
                                 <span class="text-blue-300 font-bold flex items-center gap-1">
-                                    <i class="fa-solid fa-gift text-amber-400 animate-bounce"></i> 기간한정 프로모션 지급액
+                                    <i class="fa-solid fa-gift text-amber-400 animate-bounce"></i> 기간한정 일시불 프로모션
                                 </span>
                                 <span class="font-black text-amber-400"><span id="rentPromoTotal">0</span> 원</span>
                             </div>
@@ -482,7 +479,9 @@ HTML_TEMPLATE = """
             if(isNaN(pyeong) || pyeong <= 0) pyeong = 0.0;
             
             const m2 = pyeong * 3.3058;
-            const kw = pyeong / 3.0;
+            
+            // 🚨 [설계 기준 변경] 기존 3.0평에서 타사 및 최신 모듈 스펙을 감안한 2.5평당 1kW의 현실적인 중간값 세팅
+            const kw = pyeong / 2.5;
             
             const brandRules = {
                 henergy: { name: "H에너지", minKw: 50, rate1: 35000, y1: 5, rate2: 40000, y2: 15, promo: 100000 },
@@ -558,15 +557,16 @@ HTML_TEMPLATE = """
                 document.getElementById('rentAnnual2').innerText = Math.round(annualRent2).toLocaleString();
                 document.getElementById('rentPromoTotal').innerText = Math.round(promoBonusTotal).toLocaleString();
 
-                document.getElementById('rentLabel1').innerText = "초기 연 임대료 (" + activeBrand.y1 + "년)";
-                document.getElementById('rentLabel2').innerText = "후기 연 임대료 (" + activeBrand.y2 + "년)";
+                // 🚨 텍스트 직관화: 지주들이 총합으로 오해하지 않도록 '매년 지급' 문구 강화
+                document.getElementById('rentLabel1').innerText = "초기 연 임대료 (" + activeBrand.y1 + "년간 매년 지급)";
+                document.getElementById('rentLabel2').innerText = "후기 연 임대료 (" + activeBrand.y2 + "년간 매년 지급)";
             } else {
                 document.getElementById('rentAnnual1').innerText = "0";
                 document.getElementById('rentMonthly1').innerText = "0";
                 document.getElementById('rentAnnual2').innerText = "0";
                 document.getElementById('rentPromoTotal').innerText = "0";
-                document.getElementById('rentLabel1').innerText = "초기 연 임대료";
-                document.getElementById('rentLabel2').innerText = "후기 연 임대료";
+                document.getElementById('rentLabel1').innerText = "초기 연 임대료 (매년 지급)";
+                document.getElementById('rentLabel2').innerText = "후기 연 임대료 (매년 지급)";
                 
                 document.getElementById('promoPanel').classList.add('hidden');
                 document.getElementById('promoWarning').classList.remove('hidden');
@@ -576,6 +576,3 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
