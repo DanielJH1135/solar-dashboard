@@ -333,7 +333,7 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
+                    <div class="bg-gradient-to-b from-blue-500/10 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
                         <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대 사업형</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 토지·지붕 임대
@@ -484,7 +484,6 @@ HTML_TEMPLATE = """
             const m2 = pyeong * 3.3058;
             const kw = pyeong / 3.0;
             
-            // 🚨 [임대 데이터베이스 매핑] 안내 데이터 100% 미러링 셋업
             const brandRules = {
                 henergy: { name: "H에너지", minKw: 50, rate1: 35000, y1: 5, rate2: 40000, y2: 15, promo: 100000 },
                 madimi: { name: "마디미에너지", minKw: 50, rate1: 40000, y1: 5, rate2: 40000, y2: 15, promo: 100000 },
@@ -496,7 +495,6 @@ HTML_TEMPLATE = """
             const currentSelected = brandSelect.value;
             let firstValidBrand = null;
 
-            // [동적 드롭다운 상태 제어 변환] 평수=용량 캐파에 맞지 않으면 회색 비활성화 및 글자 가독성 분리
             for (let i = 0; i < brandSelect.options.length; i++) {
                 const opt = brandSelect.options[i];
                 const target = brandRules[opt.value];
@@ -507,11 +505,10 @@ HTML_TEMPLATE = """
                     if (!firstValidBrand) firstValidBrand = opt.value;
                 } else {
                     opt.disabled = true;
-                    opt.text = target.name + " (최소 " + target.minKw + "kW) - [용량달 미달]";
+                    opt.text = target.name + " (최소 " + target.minKw + "kW) - [용량 미달]";
                 }
             }
 
-            // 현재 선택한 브랜드가 용량 부족으로 튕겼다면 차선책 자동 지정
             if (brandSelect.querySelector('option[value="' + currentSelected + '"]').disabled) {
                 if (firstValidBrand) {
                     brandSelect.value = firstValidBrand;
@@ -521,7 +518,6 @@ HTML_TEMPLATE = """
             const activeCode = brandSelect.value;
             const activeBrand = brandRules[activeCode];
 
-            // 1안 자가형 공사비 연산
             let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
             if (isNaN(kwCostInput) || kwCostInput <= 0) kwCostInput = 800000;
             
@@ -548,7 +544,6 @@ HTML_TEMPLATE = """
                 document.getElementById('paybackLabel').innerText = "-";
             }
 
-            // 🚨 2안 임대형 실전 수식 동기화 정밀 연산 바인딩
             if (kw > 0 && kw >= activeBrand.minKw) {
                 document.getElementById('promoPanel').classList.remove('hidden');
                 document.getElementById('promoWarning').classList.add('hidden');
@@ -566,7 +561,6 @@ HTML_TEMPLATE = """
                 document.getElementById('rentLabel1').innerText = "초기 연 임대료 (" + activeBrand.y1 + "년)";
                 document.getElementById('rentLabel2').innerText = "후기 연 임대료 (" + activeBrand.y2 + "년)";
             } else {
-                // 부지가 너무 작아 임대 계약이 성립되지 않는 조건일 때 UI 잠금 제어
                 document.getElementById('rentAnnual1').innerText = "0";
                 document.getElementById('rentMonthly1').innerText = "0";
                 document.getElementById('rentAnnual2').innerText = "0";
@@ -581,3 +575,7 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
+"""
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
