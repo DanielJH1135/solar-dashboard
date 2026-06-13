@@ -295,7 +295,7 @@ HTML_TEMPLATE = """
                     <div class="bg-gray-950 p-3 rounded-xl border border-gray-850 flex items-center justify-between">
                         <span class="text-xs text-gray-500" id="inputLabel">지붕 대상 면적 입력 (평)</span>
                         <div class="flex items-center gap-1">
-                            <input type="number" id="customPyeong" oninput="calculateValues()" class="w-24 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
+                            <input type="number" id="customPyeong" value="150" oninput="calculateValues()" class="w-24 bg-gray-900 border border-gray-700 rounded px-3 py-1 text-white font-bold focus:outline-none text-right">
                             <span class="text-xs text-gray-400 font-bold">평</span>
                         </div>
                     </div>
@@ -334,22 +334,47 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="bg-gradient-to-b from-blue-950/20 to-transparent border-2 border-blue-500/40 rounded-xl p-4 relative">
-                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대(50kW이상)</div>
+                        <div class="absolute top-0 right-0 bg-blue-500 text-white font-black text-[10px] px-2.5 py-1 rounded-bl-xl">임대 사업형</div>
                         <h3 class="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 지붕임대
+                            <i class="fa-solid fa-building-user text-blue-400"></i> [2안] 토지·지붕 임대
                         </h3>
+
+                        <div class="mb-3 bg-gray-950 p-2.5 rounded-lg border border-blue-900/30">
+                            <label class="text-[10px] text-blue-400 font-semibold block mb-1">임대 브랜드 선택 (용량별 자동 필터)</label>
+                            <select id="rentalCompany" onchange="calculateValues()" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-white font-bold text-xs focus:outline-none focus:border-blue-500 cursor-pointer">
+                                <option value="henergy">H에너지 (최소 50kW)</option>
+                                <option value="madimi">마디미에너지 (최소 50kW)</option>
+                                <option value="cnc">씨엔씨티 (최소 150kW / 법인)</option>
+                                <option value="solarone">솔라원 (최소 300kW)</option>
+                            </select>
+                        </div>
+
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
                                 <span class="text-gray-500">초기 투자비용</span>
                                 <span class="font-bold text-blue-400">0원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">월 수령 임대료(단순/12)</span>
-                                <span class="font-bold text-white"><span id="rentMonthly">0</span> 원</span>
+                                <span class="text-gray-500" id="rentLabel1">초기 연 임대료</span>
+                                <span class="font-bold text-white"><span id="rentAnnual1">0</span> 원</span>
                             </div>
                             <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
-                                <span class="text-gray-500">연 수령 임대료(예상)</span>
-                                <span class="font-bold text-white"><span id="rentAnnual">0</span> 원</span>
+                                <span class="text-gray-500">초기 월 임대료</span>
+                                <span class="font-bold text-emerald-400"><span id="rentMonthly1">0</span> 원</span>
+                            </div>
+                            <div class="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-850 text-xs">
+                                <span class="text-gray-500" id="rentLabel2">후기 연 임대료</span>
+                                <span class="font-bold text-white"><span id="rentAnnual2">0</span> 원</span>
+                            </div>
+                            
+                            <div id="promoPanel" class="flex justify-between items-center bg-gradient-to-r from-blue-950 to-slate-900 p-2.5 rounded border border-blue-800/40 text-xs mt-1 transition-all">
+                                <span class="text-blue-300 font-bold flex items-center gap-1">
+                                    <i class="fa-solid fa-gift text-amber-400 animate-bounce"></i> 기간한정 프로모션 지급액
+                                </span>
+                                <span class="font-black text-amber-400"><span id="rentPromoTotal">0</span> 원</span>
+                            </div>
+                            <div id="promoWarning" class="text-center text-[10px] text-rose-400 font-semibold bg-rose-950/20 p-1.5 rounded border border-rose-900/30 hidden">
+                                ⚠️ 선택된 임대사의 최소 진입 용량 미달로 임대가 불가능합니다.
                             </div>
                         </div>
                     </div>
@@ -386,7 +411,6 @@ HTML_TEMPLATE = """
             startAnalysis();
         });
 
-        // 라디오 버튼 전환 시 건축물대장에서 가져온 ㎡를 자동으로 평으로 환산하여 폼에 자동 입력
         function switchMode(mode) {
             let pyeongInput = document.getElementById('customPyeong');
             if (mode === 'land') {
@@ -453,16 +477,51 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 🚨 평수 기반 시뮬레이션 연산 로직 재배치
         function calculateValues() {
             let pyeong = parseFloat(document.getElementById('customPyeong').value);
             if(isNaN(pyeong) || pyeong <= 0) pyeong = 0.0;
             
-            // 1. 평수를 기반으로 제곱미터 역산 유저 가독성 극대화
             const m2 = pyeong * 3.3058;
-            // 2. 3평당 1kW 계산식 기반 가용 용량 산출
             const kw = pyeong / 3.0;
             
+            // 🚨 [임대 데이터베이스 매핑] 안내 데이터 100% 미러링 셋업
+            const brandRules = {
+                henergy: { name: "H에너지", minKw: 50, rate1: 35000, y1: 5, rate2: 40000, y2: 15, promo: 100000 },
+                madimi: { name: "마디미에너지", minKw: 50, rate1: 40000, y1: 5, rate2: 40000, y2: 15, promo: 100000 },
+                cnc: { name: "씨엔씨티", minKw: 150, rate1: 45000, y1: 7, rate2: 45000, y2: 13, promo: 50000 },
+                solarone: { name: "솔라원", minKw: 300, rate1: 65000, y1: 5, rate2: 40000, y2: 15, promo: 50000 }
+            };
+
+            const brandSelect = document.getElementById('rentalCompany');
+            const currentSelected = brandSelect.value;
+            let firstValidBrand = null;
+
+            // [동적 드롭다운 상태 제어 변환] 평수=용량 캐파에 맞지 않으면 회색 비활성화 및 글자 가독성 분리
+            for (let i = 0; i < brandSelect.options.length; i++) {
+                const opt = brandSelect.options[i];
+                const target = brandRules[opt.value];
+                
+                if (kw >= target.minKw) {
+                    opt.disabled = false;
+                    opt.text = target.name + " (최소 " + target.minKw + "kW) - 선택가능";
+                    if (!firstValidBrand) firstValidBrand = opt.value;
+                } else {
+                    opt.disabled = true;
+                    opt.text = target.name + " (최소 " + target.minKw + "kW) - [용량달 미달]";
+                }
+            }
+
+            // 현재 선택한 브랜드가 용량 부족으로 튕겼다면 차선책 자동 지정
+            if (brandSelect.querySelector('option[value="' + currentSelected + '"]').disabled) {
+                if (firstValidBrand) {
+                    brandSelect.value = firstValidBrand;
+                }
+            }
+
+            const activeCode = brandSelect.value;
+            const activeBrand = brandRules[activeCode];
+
+            // 1안 자가형 공사비 연산
             let kwCostInput = parseFloat(document.getElementById('kwCostInput').value);
             if (isNaN(kwCostInput) || kwCostInput <= 0) kwCostInput = 800000;
             
@@ -477,7 +536,6 @@ HTML_TEMPLATE = """
             let paybackYears = 0;
             if (annualRevenue > 0) paybackYears = (estimatedCostMan * 10000) / annualRevenue;
             
-            // 프론트 데이터 출력 바인딩
             document.getElementById('resM2').innerText = m2.toFixed(2);
             document.getElementById('estKw').innerText = kw.toFixed(2);
             document.getElementById('ownerInvest').innerText = Math.round(estimatedCostMan).toLocaleString();
@@ -490,11 +548,36 @@ HTML_TEMPLATE = """
                 document.getElementById('paybackLabel').innerText = "-";
             }
 
-            let rentUnitPrice = (currentMode === 'land') ? 30000 : 35000;
-            document.getElementById('rentAnnual').innerText = Math.round(kw * rentUnitPrice).toLocaleString();
-            document.getElementById('rentMonthly').innerText = Math.round((kw * rentUnitPrice) / 12).toLocaleString();
+            // 🚨 2안 임대형 실전 수식 동기화 정밀 연산 바인딩
+            if (kw > 0 && kw >= activeBrand.minKw) {
+                document.getElementById('promoPanel').classList.remove('hidden');
+                document.getElementById('promoWarning').classList.add('hidden');
+
+                const annualRent1 = kw * activeBrand.rate1;
+                const monthlyRent1 = annualRent1 / 12;
+                const annualRent2 = kw * activeBrand.rate2;
+                const promoBonusTotal = kw * activeBrand.promo;
+
+                document.getElementById('rentAnnual1').innerText = Math.round(annualRent1).toLocaleString();
+                document.getElementById('rentMonthly1').innerText = Math.round(monthlyRent1).toLocaleString();
+                document.getElementById('rentAnnual2').innerText = Math.round(annualRent2).toLocaleString();
+                document.getElementById('rentPromoTotal').innerText = Math.round(promoBonusTotal).toLocaleString();
+
+                document.getElementById('rentLabel1').innerText = "초기 연 임대료 (" + activeBrand.y1 + "년)";
+                document.getElementById('rentLabel2').innerText = "후기 연 임대료 (" + activeBrand.y2 + "년)";
+            } else {
+                // 부지가 너무 작아 임대 계약이 성립되지 않는 조건일 때 UI 잠금 제어
+                document.getElementById('rentAnnual1').innerText = "0";
+                document.getElementById('rentMonthly1').innerText = "0";
+                document.getElementById('rentAnnual2').innerText = "0";
+                document.getElementById('rentPromoTotal').innerText = "0";
+                document.getElementById('rentLabel1').innerText = "초기 연 임대료";
+                document.getElementById('rentLabel2').innerText = "후기 연 임대료";
+                
+                document.getElementById('promoPanel').classList.add('hidden');
+                document.getElementById('promoWarning').classList.remove('hidden');
+            }
         }
     </script>
 </body>
 </html>
-"""
